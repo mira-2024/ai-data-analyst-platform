@@ -1,0 +1,51 @@
+# ── Python ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv
+venv/
+ENV/
+env/
+pip-log.txt
+
+# ── Environment / Secrets (NEVER commit these) ──────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── FastAPI / Backend ───────────────────────────────────────────────────────────
+backend/storage/
+backend/uploads/
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# ── Node / React ────────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# ── IDEs ────────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Logs ────────────────────────────────────────────────────────────────────────
+*.log
+
+# ── Database ────────────────────────────────────────────────────────────────────
+*.db
+*.sqlite3
+
+# ── Claude / AI tooling ─────────────────────────────────────────────────────────
+.claude/

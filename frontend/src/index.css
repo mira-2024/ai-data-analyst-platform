@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base resets ─────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: #111113;
+    color: #f4f4f5;
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
+
+  /* Focus ring */
+  :focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(99, 102, 241, 0.3);
+    color: #f4f4f5;
+  }
+}
+
+/* ── Component utilities ─────────────────────────────────────────── */
+@layer components {
+  /* Card base */
+  .card {
+    @apply bg-surface-1 border border-surface-4 rounded-xl shadow-card;
+  }
+
+  /* Elevated card (modal-like) */
+  .card-elevated {
+    @apply bg-surface-2 border border-surface-4 rounded-xl shadow-card-hover;
+  }
+
+  /* Input base */
+  .input-base {
+    @apply w-full bg-surface-3 border border-surface-4 rounded-lg px-3 py-2
+           text-sm text-zinc-100 placeholder:text-zinc-500
+           focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500
+           transition-colors duration-150;
+  }
+
+  /* Glow effect for active elements */
+  .glow-brand {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-gradient-brand bg-clip-text text-transparent;
+  }
+
+  /* Agent status badges */
+  .badge-running {
+    @apply bg-brand-500/15 text-brand-400 border border-brand-500/30;
+  }
+  .badge-completed {
+    @apply bg-success/15 text-success border border-success/30;
+  }
+  .badge-failed {
+    @apply bg-danger/15 text-danger border border-danger/30;
+  }
+  .badge-pending {
+    @apply bg-zinc-800 text-zinc-400 border border-zinc-700;
+  }
+  .badge-warning {
+    @apply bg-warning/15 text-warning border border-warning/30;
+  }
+
+  /* Monospace blocks */
+  .code-block {
+    @apply font-mono text-xs bg-surface-0 border border-surface-4 rounded-lg p-3 overflow-x-auto;
+  }
+
+  /* Grid background pattern for landing */
+  .grid-bg {
+    background-image: radial-gradient(circle, #27272a 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}
+
+/* ── Utility overrides ───────────────────────────────────────────── */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Truncate multiple lines */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* ── Animation overrides ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #1c1c1f 0%,
+    #27272a 50%,
+    #1c1c1f 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Plotly chart overrides for dark theme */
+.plotly-chart .js-plotly-plot .plotly .cursor-crosshair {
+  cursor: crosshair;
+}
+.modebar {
+  background: transparent !important;
+}
+.modebar-btn path {
+  fill: #71717a !important;
+}
+.modebar-btn:hover path {
+  fill: #a1a1aa !important;
+}
