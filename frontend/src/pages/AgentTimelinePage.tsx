@@ -109,9 +109,9 @@ function AgentCard({
       )}
 
       {/* Token count */}
-      {agentRun.tokens_in + agentRun.tokens_out > 0 && (
+      {agentRun.tokens_input + agentRun.tokens_output > 0 && (
         <p className="text-2xs text-zinc-600 mt-1">
-          {(agentRun.tokens_in + agentRun.tokens_out).toLocaleString()} tokens
+          {(agentRun.tokens_input + agentRun.tokens_output).toLocaleString()} tokens
           {agentRun.started_at && agentRun.completed_at && ` · ${
             ((new Date(agentRun.completed_at).getTime() - new Date(agentRun.started_at).getTime()) / 1000).toFixed(1)
           }s`}

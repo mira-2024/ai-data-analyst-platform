@@ -169,13 +169,65 @@ class DatasetService:
                 dataset.status = DatasetStatus.READY
                 dataset.row_count = dataset_profile.row_count
                 dataset.column_count = dataset_profile.column_count
-                dataset.schema_json = [
-                    col.model_dump() for col in dataset_profile.columns
-                ]
+
+                # Merge ColumnSchema + ColumnStatistics so each column dict has
+                # both null_count (from schema) and null_pct + numeric stats (from stats)
+                row_count = dataset_profile.row_count
+                merged_columns = []
+                for col_schema, col_stats in zip(
+                    dataset_profile.columns, dataset_profile.statistics
+                ):
+                    col_dict = col_schema.model_dump()
+                    col_dict["null_pct"] = col_stats.null_pct
+                    if col_stats.mean is not None:
+                        col_dict["mean"] = col_stats.mean
+                        col_dict["std"] = col_stats.std
+                        col_dict["min"] = col_stats.min
+                        col_dict["max"] = col_stats.max
+                    merged_columns.append(col_dict)
+                dataset.schema_json = merged_columns
+
                 dataset.preview_json = dataset_profile.preview_rows
-                dataset.statistics_json = [
-                    stat.model_dump() for stat in dataset_profile.statistics
+
+                # Build a summary dict (not a list) for statistics_json so the
+                # frontend DatasetProfile type is satisfied
+                total_cells = row_count * dataset_profile.column_count
+                null_cells = sum(
+                    int((s.null_pct / 100) * row_count)
+                    for s in dataset_profile.statistics
+                )
+                overall_null_rate = (
+                    round(null_cells / total_cells * 100, 2) if total_cells > 0 else 0.0
+                )
+                quality_score = round(max(0.0, (100.0 - overall_null_rate) / 100.0), 3)
+
+                likely_datetime = [
+                    col.name for col in dataset_profile.columns
+                    if any(
+                        kw in col.name.lower()
+                        for kw in ("date", "time", "timestamp", "created", "updated")
+                    )
                 ]
+                likely_id = [
+                    col.name for col in dataset_profile.columns
+                    if col.unique_count is not None
+                    and col.unique_count == row_count
+                    and row_count > 0
+                    and (
+                        col.name.lower() in ("id", "uuid", "key")
+                        or col.name.lower().endswith("_id")
+                        or col.name.lower().endswith("_key")
+                        or col.name.lower().endswith("uuid")
+                    )
+                ]
+                dataset.statistics_json = {
+                    "quality_score": quality_score,
+                    "row_count": row_count,
+                    "column_count": dataset_profile.column_count,
+                    "likely_datetime_columns": likely_datetime,
+                    "likely_id_columns": likely_id,
+                    "overall_null_rate_pct": overall_null_rate,
+                }
                 dataset.updated_at = datetime.now(tz=timezone.utc)
 
                 logger.info(

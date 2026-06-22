@@ -53,10 +53,10 @@ function DatasetRow({ dataset }: { dataset: Dataset }) {
         <div className="min-w-0">
           <p className="text-sm font-medium text-zinc-100 truncate">{dataset.name}</p>
           <p className="text-xs text-zinc-500">
-            {dataset.statistics_json?.row_count != null
-              ? `${dataset.statistics_json.row_count.toLocaleString()} rows · ${dataset.statistics_json.column_count ?? '?'} cols`
-              : (dataset.file_type ?? 'unknown').toUpperCase()
-            } · {formatBytes(dataset.file_size ?? 0)}
+            {dataset.row_count != null
+              ? `${dataset.row_count.toLocaleString()} rows · ${dataset.column_count ?? '?'} cols`
+              : (dataset.file_extension ?? 'unknown').toUpperCase()
+            } · {formatBytes(dataset.file_size_bytes ?? 0)}
           </p>
         </div>
       </div>

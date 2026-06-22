@@ -313,11 +313,28 @@ class AnalysisService:
                     cancel_token=cancel_token,
                 )
 
+                # Inject dataset name so StorytellerAgent uses it as the report title
+                agent_summary["name"] = dataset.name
+
                 final_state = await runner.run(
                     df=df,
                     agent_summary=agent_summary,
                     config=config,
                 )
+
+                # Persist report to DB if storyteller ran successfully
+                storyteller_output = final_state.get("storyteller_output")
+                if storyteller_output:
+                    from app.services.report_service import ReportService
+                    report_svc = ReportService(db)
+                    visualizer_output = final_state.get("visualizer_output")
+                    charts = visualizer_output.charts if visualizer_output else []
+                    await report_svc.create_report(
+                        session_id=session_id,
+                        agent_run_id=final_state.get("storyteller_run_id"),
+                        storyteller_output=storyteller_output,
+                        chart_specs=charts,
+                    )
 
                 # Mark session as completed
                 end_time = datetime.now(tz=timezone.utc)
@@ -370,10 +387,8 @@ class AnalysisService:
                 )
 
             finally:
-                # Signal SSE clients the stream is done
-                for subscriber in getattr(bus, "_subscribers", []):
-                    if hasattr(subscriber, "_queue"):
-                        await subscriber._queue.close()
+                # Signal all SSE clients the stream is done
+                await bus.close_all_queues()
 
                 await event_bus_registry.destroy(session_id_str)
                 _cancel_tokens.pop(session_id_str, None)

@@ -191,7 +191,7 @@ export function WorkspacePage() {
           { label: "Status",  value: <Badge variant={statusVariant(dataset.status)}>{dataset.status}</Badge> },
           { label: "Rows",    value: stats?.row_count != null ? stats.row_count.toLocaleString() : "—" },
           { label: "Columns", value: stats?.column_count != null ? stats.column_count : "—" },
-          { label: "Size",    value: formatBytes(dataset.file_size ?? 0) },
+          { label: "Size",    value: formatBytes(dataset.file_size_bytes ?? 0) },
         ].map(({ label, value }) => (
           <Card key={label} className="p-4">
             <p className="text-2xs text-zinc-500 mb-1">{label}</p>

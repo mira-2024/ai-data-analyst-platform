@@ -12,8 +12,17 @@ export const api = axios.create({
   },
 });
 
-// ── Request interceptor — add auth token when present ─────────────
+// ── Request interceptor — add API key + legacy bearer token ───────
 api.interceptors.request.use((config) => {
+  // X-API-Key: read from env (Vite exposes VITE_* vars at build time)
+  // In dev: set VITE_API_KEY in frontend/.env.local
+  // In prod: set at build time or inject via reverse proxy
+  const apiKey = import.meta.env.VITE_API_KEY as string | undefined;
+  if (apiKey && config.headers) {
+    config.headers["X-API-Key"] = apiKey;
+  }
+
+  // Legacy bearer token (kept for future JWT upgrade)
   const token = localStorage.getItem("dataflow_token");
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;

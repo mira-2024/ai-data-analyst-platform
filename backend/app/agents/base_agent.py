@@ -149,7 +149,7 @@ class BaseAgent(ABC):
         # Wrap callbacks to be sync-compatible (LLMClient calls them in threadpool)
         import asyncio
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def sync_on_tool_call(name: str, inp: dict) -> None:
             asyncio.run_coroutine_threadsafe(on_tool_call(name, inp), loop)

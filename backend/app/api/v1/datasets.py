@@ -19,7 +19,9 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.exceptions import FileTooLargeError, UnsupportedFileTypeError
 from app.schemas.dataset import (
     DatasetListResponse,
     DatasetResponse,
@@ -27,6 +29,7 @@ from app.schemas.dataset import (
 )
 
 router = APIRouter()
+settings = get_settings()
 
 
 @router.post("/upload", response_model=DatasetResponse, status_code=201)
@@ -43,6 +46,26 @@ async def upload_dataset(
     Returns immediately with status=pending — poll GET /datasets/{id}
     or subscribe to SSE stream for profiling completion.
     """
+    # ── Validate file extension ───────────────────────────────────────────────
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in settings.UPLOAD_ALLOWED_EXTENSIONS:
+        raise UnsupportedFileTypeError(
+            filename=filename,
+            allowed=settings.UPLOAD_ALLOWED_EXTENSIONS,
+        )
+
+    # ── Validate file size ────────────────────────────────────────────────────
+    # Read content once so we can check the size before storage.
+    content = await file.read()
+    if len(content) > settings.upload_max_bytes:
+        raise FileTooLargeError(
+            size_bytes=len(content),
+            max_bytes=settings.upload_max_bytes,
+        )
+    # Seek back so DatasetService can read from the beginning.
+    await file.seek(0)
+
     from app.services.dataset_service import DatasetService
     service = DatasetService(db)
     dataset = await service.upload(

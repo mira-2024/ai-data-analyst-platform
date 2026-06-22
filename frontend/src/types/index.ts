@@ -1,6 +1,6 @@
 // ── Dataset ────────────────────────────────────────────────────────────────────
 
-export type DatasetStatus = "pending" | "ready" | "error";
+export type DatasetStatus = "pending" | "profiling" | "ready" | "error";
 
 export interface ColumnProfile {
   name: string;
@@ -29,9 +29,12 @@ export interface Dataset {
   id: string;
   name: string;
   description: string | null;
-  filename: string;
-  file_size: number;
-  file_type: string;
+  original_filename: string;
+  file_size_bytes: number;
+  file_extension: string;
+  mime_type: string;
+  row_count: number | null;
+  column_count: number | null;
   status: DatasetStatus;
   schema_json: ColumnProfile[] | null;
   preview_json: Record<string, unknown>[] | null;
@@ -58,8 +61,8 @@ export interface AgentRun {
   status: AgentStatus;
   started_at: string | null;
   completed_at: string | null;
-  tokens_in: number;
-  tokens_out: number;
+  tokens_input: number;
+  tokens_output: number;
   error_message: string | null;
 }
 
@@ -70,7 +73,7 @@ export interface AnalysisSession {
   started_at: string | null;
   completed_at: string | null;
   total_tokens_used: number;
-  config: AnalysisConfig;
+  config_json: Record<string, unknown>;
   agent_runs: AgentRun[];
   created_at: string;
   updated_at: string;

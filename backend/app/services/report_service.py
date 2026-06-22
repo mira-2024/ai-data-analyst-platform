@@ -53,7 +53,7 @@ class ReportService:
             .order_by(ChartConfig.display_order)
         )
         # Attach charts manually for the response schema
-        report.__dict__["_charts"] = list(charts_result.scalars().all())
+        report.__dict__["charts"] = list(charts_result.scalars().all())
 
         return report
 

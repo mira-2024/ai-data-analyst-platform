@@ -118,8 +118,15 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 
-    # ── Auth (stubbed — ready for future implementation) ──────────────────────
-    AUTH_ENABLED: bool = False
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    AUTH_ENABLED: bool = True
+    # Simple API key auth. Set this to a strong random string in production.
+    # Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+    # Clients must send: X-API-Key: <this value>
+    API_KEY: str = Field(
+        default="",
+        description="Bearer token for API access. Empty = no auth check (dev only).",
+    )
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 

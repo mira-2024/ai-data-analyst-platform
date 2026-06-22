@@ -189,7 +189,7 @@ def _friendly_dtype(series: pd.Series) -> str:
         return "boolean"
     if pd.api.types.is_datetime64_any_dtype(dtype):
         return "datetime"
-    if pd.api.types.is_categorical_dtype(dtype):
+    if isinstance(dtype, pd.CategoricalDtype):
         return "category"
     return "string"
 

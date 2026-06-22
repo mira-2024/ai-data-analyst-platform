@@ -122,6 +122,18 @@ class EventBus:
         for event in events:
             await self.emit(event)
 
+    async def close_all_queues(self) -> None:
+        """
+        Signal all connected SSE clients that the stream is closed.
+
+        Iterates subscribers and calls close() on any SSEBroadcaster queues.
+        Use this instead of reaching into private internals from outside.
+        """
+        for subscriber in self._subscribers:
+            queue = getattr(subscriber, "_queue", None)
+            if queue is not None and hasattr(queue, "close"):
+                await queue.close()
+
     @property
     def subscriber_count(self) -> int:
         return len(self._subscribers)

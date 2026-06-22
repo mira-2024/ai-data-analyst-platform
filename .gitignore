@@ -49,3 +49,17 @@ Thumbs.db
 
 # ── Claude / AI tooling ─────────────────────────────────────────────────────────
 .claude/
+
+# ── pytest / coverage ────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ── mypy / ruff ──────────────────────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+
+# ── Streamlit (old prototype) ─────────────────────────────────────────────────────
+streamlit.log
+streamlit.log.err

@@ -177,68 +177,92 @@ class GeminiLLMClient:
     """
     Google Gemini client with function-calling loop support.
 
+    Uses the current `google-genai` SDK (≥ 1.0).  The deprecated
+    `google-generativeai` SDK has been removed.
+
     Free tier: gemini-2.0-flash (15 RPM, 1M TPM, 1500 RPD)
     Converts Anthropic-style tool definitions to Gemini format automatically.
+
+    Install:
+        pip install google-genai>=1.0.0
     """
 
     def __init__(self) -> None:
         try:
-            import google.generativeai as genai
+            from google import genai
+            from google.genai import types as genai_types
         except ImportError:
             raise LLMError(
-                message="google-generativeai package not installed. "
-                        "Run: pip install google-generativeai"
+                message="google-genai package not installed. "
+                        "Run: pip install 'google-genai>=1.0.0'"
             )
         if not settings.GEMINI_API_KEY:
             raise LLMError(message="GEMINI_API_KEY is not configured.")
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self._genai = genai
+
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        self._types = genai_types
         logger.info("llm_client_initialized", model=settings.LLM_MODEL, provider="gemini")
 
-    def _convert_tools(self, tools: list[ToolDefinition]) -> list[dict]:
+    def _convert_tools(self, tools: list[ToolDefinition]) -> list[Any]:
         """
-        Convert Anthropic tool format to Gemini function declarations.
+        Convert Anthropic-style tool definitions to google-genai Tool objects.
 
-        Anthropic format:
+        Anthropic input format:
             {"name": ..., "description": ..., "input_schema": {JSON Schema}}
 
-        Gemini format:
-            {"function_declarations": [{"name": ..., "description": ..., "parameters": {JSON Schema}}]}
+        Converted to:
+            types.Tool(function_declarations=[types.FunctionDeclaration(...)])
         """
-        function_declarations = []
+        declarations = []
         for tool in tools:
             schema = dict(tool.get("input_schema", {}))
-            # Gemini does not use 'additionalProperties' — remove if present
+            # Gemini rejects 'additionalProperties' — strip it recursively
             schema.pop("additionalProperties", None)
-            # Ensure properties descriptions are strings (Gemini is strict)
             if "properties" in schema:
-                for prop_name, prop_val in schema["properties"].items():
+                for prop_val in schema["properties"].values():
                     if isinstance(prop_val, dict):
                         prop_val.pop("additionalProperties", None)
 
-            function_declarations.append({
-                "name": tool["name"],
-                "description": tool.get("description", ""),
-                "parameters": schema,
-            })
-        return [{"function_declarations": function_declarations}]
+            declarations.append(
+                self._types.FunctionDeclaration(
+                    name=tool["name"],
+                    description=tool.get("description", ""),
+                    parameters=schema,
+                )
+            )
+        return [self._types.Tool(function_declarations=declarations)]
 
-    @staticmethod
-    def _send_with_retry(chat: Any, message: Any, max_retries: int = 5) -> Any:
+    def _call_api(
+        self,
+        contents: list[Any],
+        gemini_tools: list[Any],
+        system_instruction: str,
+        max_retries: int = 5,
+    ) -> Any:
         """
-        Send a Gemini message, retrying on 429 rate-limit errors.
+        Call `client.models.generate_content` with 429-aware retry logic.
 
         The free tier allows 15 RPM. With 4 sequential agents each making
-        multiple tool calls, we can burst past that limit. This method:
-          1. Catches ResourceExhausted (HTTP 429) exceptions
-          2. Parses the "retry in Xs" hint from the error message
-          3. Sleeps for that duration (+ 2s buffer) then retries
-          4. Falls back to exponential backoff if no hint is found
+        multiple tool calls, we can burst past that limit. Retry strategy:
+          1. Parse "retry in Xs" hint from the error message
+          2. Sleep for that duration (+ 2s buffer), capped at 90s
+          3. Fall back to exponential backoff when no hint is present
         """
-        delay = 5.0  # Initial backoff in seconds
+        config = self._types.GenerateContentConfig(
+            tools=gemini_tools,
+            system_instruction=system_instruction,
+            temperature=settings.LLM_TEMPERATURE,
+            max_output_tokens=settings.LLM_MAX_TOKENS,
+        )
+
+        delay = 5.0
         for attempt in range(max_retries + 1):
             try:
-                return chat.send_message(message)
+                return self._client.models.generate_content(
+                    model=settings.LLM_MODEL,
+                    contents=contents,
+                    config=config,
+                )
             except Exception as exc:
                 exc_str = str(exc)
                 is_rate_limit = (
@@ -250,7 +274,6 @@ class GeminiLLMClient:
                 if not is_rate_limit or attempt >= max_retries:
                     raise
 
-                # Try to extract the suggested retry delay from the error message
                 m = re.search(
                     r"retry in (\d+(?:\.\d+)?)\s*(ms|s)\b",
                     exc_str,
@@ -260,10 +283,10 @@ class GeminiLLMClient:
                     wait = float(m.group(1))
                     if m.group(2).lower() == "ms":
                         wait /= 1000.0
-                    wait = min(wait + 2.0, 90.0)   # add 2s buffer, cap at 90s
+                    wait = min(wait + 2.0, 90.0)
                 else:
                     wait = min(delay, 90.0)
-                    delay *= 2.0                    # exponential backoff
+                    delay *= 2.0
 
                 logger.warning(
                     "gemini_rate_limit_retry",
@@ -288,29 +311,26 @@ class GeminiLLMClient:
         import asyncio
 
         gemini_tools = self._convert_tools(tools)
+        types = self._types
 
-        model = self._genai.GenerativeModel(
-            model_name=settings.LLM_MODEL,
-            system_instruction=system_prompt,
-            tools=gemini_tools,
-        )
-
-        chat = model.start_chat()
+        # Maintain conversation as a list of Content objects (new SDK pattern)
+        contents: list[Any] = [
+            types.Content(
+                role="user",
+                parts=[types.Part(text=user_message)],
+            )
+        ]
 
         total_tokens_in = 0
         total_tokens_out = 0
         iteration = 0
         max_iterations = 15
 
-        # First message is the user string; subsequent messages are tool responses
-        current_message: Any = user_message
-
         while iteration < max_iterations:
             iteration += 1
 
-            # Use retry wrapper — free tier is 15 RPM and tool-heavy agents can hit it
             response = await asyncio.to_thread(
-                self._send_with_retry, chat, current_message
+                self._call_api, contents, gemini_tools, system_prompt
             )
 
             # Accumulate token counts
@@ -326,14 +346,16 @@ class GeminiLLMClient:
                 tokens_out=total_tokens_out,
             )
 
-            # Collect function calls and text parts
+            # Extract parts from the first candidate
+            candidate = response.candidates[0]
+            parts = candidate.content.parts if candidate.content else []
+
             function_calls = []
             text_parts = []
-
-            for part in response.parts:
-                if hasattr(part, "function_call") and part.function_call.name:
+            for part in parts:
+                if part.function_call and part.function_call.name:
                     function_calls.append(part.function_call)
-                elif hasattr(part, "text") and part.text:
+                elif part.text:
                     text_parts.append(part.text)
 
             # No function calls → final answer
@@ -345,8 +367,11 @@ class GeminiLLMClient:
                     stop_reason="end_turn",
                 )
 
-            # Execute all function calls and build response parts
-            tool_response_parts = []
+            # Append model turn to conversation
+            contents.append(candidate.content)
+
+            # Execute tool calls, build function-response turn
+            response_parts = []
             for fc in function_calls:
                 tool_name = fc.name
                 tool_input = dict(fc.args)
@@ -369,17 +394,19 @@ class GeminiLLMClient:
                 if on_tool_result:
                     on_tool_result(tool_name, json.dumps(result_data, default=str))
 
-                tool_response_parts.append(
-                    self._genai.protos.Part(
-                        function_response=self._genai.protos.FunctionResponse(
+                response_parts.append(
+                    types.Part(
+                        function_response=types.FunctionResponse(
                             name=tool_name,
                             response={"result": result_data},
                         )
                     )
                 )
 
-            # Send tool results back to Gemini
-            current_message = tool_response_parts
+            # Append tool responses as a user turn
+            contents.append(
+                types.Content(role="user", parts=response_parts)
+            )
 
         raise LLMError(
             message=f"Tool-use loop exceeded {max_iterations} iterations."

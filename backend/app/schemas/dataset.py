@@ -61,7 +61,7 @@ class DatasetResponse(BaseModel):
     column_count: int | None
     schema_json: list[dict[str, Any]] | None = None
     preview_json: list[dict[str, Any]] | None = None
-    statistics_json: list[dict[str, Any]] | None = None
+    statistics_json: dict[str, Any] | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

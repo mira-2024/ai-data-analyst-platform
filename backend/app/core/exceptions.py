@@ -113,6 +113,14 @@ class ReportNotFoundError(NotFoundError):
         )
 
 
+# ── 401 Unauthorized ─────────────────────────────────────────────────────────
+
+class UnauthorizedError(AppError):
+    status_code = 401
+    error_code = "UNAUTHORIZED"
+    message = "Missing or invalid API key. Set X-API-Key header."
+
+
 # ── 409 Conflict ──────────────────────────────────────────────────────────────
 
 class ConflictError(AppError):
