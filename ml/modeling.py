@@ -103,8 +103,14 @@ def _looks_like_id(df: pd.DataFrame, col: str) -> bool:
     if name in ("id", "index", "uuid") or name.endswith("_id") or name.endswith("id"):
         if df[col].nunique() > 0.9 * len(df):
             return True
-    # near-unique column is probably an identifier, not a feature/target
-    return df[col].nunique() >= 0.98 * len(df) and len(df) > 10
+    # A near-unique *non-numeric* column (names, codes, UUIDs) is an identifier.
+    # Continuous numeric columns are legitimately near-unique (every float differs)
+    # and are real features, so they must NEVER be treated as IDs.
+    return (
+        df[col].nunique() >= 0.98 * len(df)
+        and len(df) > 10
+        and not pd.api.types.is_numeric_dtype(df[col])
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

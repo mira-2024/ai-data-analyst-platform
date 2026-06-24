@@ -3,6 +3,10 @@
 **Final Year Project — B.Sc. Data Science, Lebanese University**
 **Student:** Mira
 
+[![CI](https://github.com/mira-2024/ai-data-analyst-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mira-2024/ai-data-analyst-platform/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Tested with pytest](https://img.shields.io/badge/tested%20with-pytest-0A9EDC)
+
 ---
 
 ## 1. Abstract
@@ -103,33 +107,32 @@ GEMINI_API_KEY=your_key_from_https://aistudio.google.com/apikey
 LLM_MODEL=gemini-2.5-flash
 ```
 
-## 7. Reproducibility
+## 7. Testing
+
+The data-science core, the cleaning agent and the orchestrator are covered by an
+automated `pytest` suite (`tests/`). It checks the statistics and ML outputs,
+guards against regressions (e.g. the cleaning agent must not turn missing
+categories into the string `"nan"`; continuous numeric features must not be
+mistaken for ID columns), and verifies the pipeline is reproducible.
+
+```bash
+pip install -r requirements-dev.txt
+pytest                       # 26 tests
+pytest --cov=ml --cov=agents # with coverage
+```
+
+Tests run automatically on every push via GitHub Actions (`.github/workflows/ci.yml`)
+across Python 3.10–3.12.
+
+## 8. Reproducibility
 
 All randomised steps (train/test splitting, model training, permutation
 importance) use a fixed seed (`random_state=42`), so results are identical
 across runs. No result depends on a network call to an LLM.
 
-## 8. Repository Layout
+## 9. Repository Layout
 
 ```
 Mira_Fyp/
 ├── app.py                      Streamlit entry point (4 tabs)
-├── ml/                         DATA-SCIENCE CORE (no LLM)
-│   ├── eda.py                  exploratory data analysis
-│   ├── statistics.py           hypothesis testing
-│   └── modeling.py             scikit-learn ML pipeline
-├── agents/                     orchestration wrappers
-├── orchestrator/               intent router
-├── ui/                         Streamlit render helpers
-├── utils/                      file loading, LLM helper, summaries
-├── sample_data/sample.csv      demo dataset (employee promotions)
-├── docs/METHODOLOGY.md         full DS methodology write-up
-├── requirements.txt
-└── archive_fullstack_version/  earlier FastAPI + React prototype (not used)
-```
-
-## 9. Future Work
-- Time-series forecasting agent (ARIMA / Prophet).
-- Hyper-parameter tuning (grid / randomised search) for the modelling stage.
-- Automated train/serve export of the best model (`joblib`).
-- Unit-test suite over `ml/` with `pytest`.
+├── ml/                         DATA-SCIENCE
