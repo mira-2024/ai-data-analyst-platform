@@ -72,13 +72,20 @@ with st.sidebar:
             f"</div></div>", unsafe_allow_html=True)
 
         st.markdown("<hr class='rule'>", unsafe_allow_html=True)
-        st.markdown("<div class='kicker'>Quick actions</div>", unsafe_allow_html=True)
-        st.caption("Runs an agent - the answer appears in the **Chat** tab.")
-        for qp in ["Clean the data", "Analyse the dataset", "Build a predictive model",
-                   "Visualize the data", "Generate a full report"]:
-            if st.button(qp, width="stretch"):
-                st.session_state["quick_prompt"] = qp
-                st.toast("Running " + qp + " - see the Chat tab.", icon="💬")
+        adv = st.toggle("Advanced mode", value=st.session_state.get("advanced", False),
+                        help="Reveal clustering, model diagnostics, feature selection "
+                             "and deeper statistics. Off by default for a simpler view.")
+        st.session_state.advanced = adv
+
+        if adv:
+            st.markdown("<hr class='rule'>", unsafe_allow_html=True)
+            st.markdown("<div class='kicker'>Quick actions</div>", unsafe_allow_html=True)
+            st.caption("Runs an agent — the answer appears in the **Chat** tab.")
+            for qp in ["Clean the data", "Analyse the dataset", "Build a predictive model",
+                       "Visualize the data", "Generate a full report"]:
+                if st.button(qp, width="stretch"):
+                    st.session_state["quick_prompt"] = qp
+                    st.toast(f"Running “{qp}” — see the Chat tab.", icon="💬")
         st.markdown("<hr class='rule'>", unsafe_allow_html=True)
         replace = st.file_uploader("Replace dataset", type=["csv", "xlsx", "xls", "json"])
         if replace is not None:
@@ -116,39 +123,54 @@ df = st.session_state.df
 theme.section("Workspace", kicker="DataFlow AI",
               sub=f"{df.shape[0]:,} rows · {df.shape[1]} columns loaded.")
 
+# Warn early if the uploaded file looks malformed (e.g. missing header row).
 for _w in eda.data_health_warnings(df):
     st.warning(_w)
 
-tab_data, tab_eda, tab_cluster, tab_model, tab_chat = st.tabs(
-    ["Data Preview", "EDA", "Clustering", "Modeling", "Chat"])
+advanced_mode = st.session_state.get("advanced", False)
+
+if advanced_mode:
+    tab_over, tab_data, tab_eda, tab_cluster, tab_model, tab_chat = st.tabs(
+        ["Overview", "Data", "Explore", "Clustering", "Predict", "Chat"])
+else:
+    tab_over, tab_data, tab_eda, tab_model, tab_chat = st.tabs(
+        ["Overview", "Data", "Explore", "Predict", "Chat"])
+    tab_cluster = None
+
+with tab_over:
+    theme.section("Overview", kicker="Start here",
+                  sub="One click runs the whole analysis and explains it in plain language.")
+    advanced.render_overview(df)
 
 with tab_data:
+    theme.section("Your data", kicker="Step 1",
+                  sub="A preview of the dataset, its columns and data quality.")
     render_data_preview(df)
 
 with tab_eda:
-    theme.section("Exploratory Data Analysis", kicker="Stage 02 · 03",
-                  sub="Descriptive + inferential statistics, computed live with pandas & SciPy.")
+    theme.section("Explore", kicker="Step 2",
+                  sub="Distributions, relationships and key statistics — computed live.")
     render_eda(df)
-    with st.expander("Deeper inferential statistics — confidence intervals, "
-                     "assumption checks & multiple-testing (FDR) correction"):
-        advanced.render_deeper_statistics(df)
+    if advanced_mode:
+        with st.expander("Deeper inferential statistics — confidence intervals, "
+                         "assumption checks & multiple-testing (FDR) correction"):
+            advanced.render_deeper_statistics(df)
 
-with tab_cluster:
-    theme.section("Unsupervised Learning", kicker="Stage 02b",
-                  sub="PCA dimensionality reduction and KMeans clustering with automatic k "
-                      "(silhouette + elbow) — finds structure with no labels.")
-    advanced.render_clustering(df)
+if advanced_mode and tab_cluster is not None:
+    with tab_cluster:
+        theme.section("Clustering", kicker="Advanced",
+                      sub="Group similar rows automatically with PCA + KMeans — no labels needed.")
+        advanced.render_clustering(df)
 
 with tab_model:
-    theme.section("Predictive Modeling", kicker="Stage 04",
-                  sub="Cross-validated Logistic/Linear Regression, Random Forest and "
-                      "Gradient Boosting, evaluated on a held-out test set. No API key required.")
+    theme.section("Predict", kicker="Step 3",
+                  sub="Train models to predict a column, and see how well they do.")
     suggested = modeling.suggest_target(df)
     cols = list(df.columns)
     default_idx = cols.index(suggested) if suggested in cols else 0
-    target = st.selectbox("Target column to predict", cols, index=default_idx)
+    target = st.selectbox("What do you want to predict?", cols, index=default_idx)
     if target:
-        st.caption(f"Detected task type: **{modeling.detect_task(df, target)}**")
+        st.caption(f"This is a **{modeling.detect_task(df, target)}** problem.")
     if st.button("Train & evaluate models", type="primary", width="stretch"):
         with st.spinner("Training models with cross-validation…"):
             out = ModelingAgent().run(df, target=target)
@@ -160,51 +182,8 @@ with tab_model:
     res = st.session_state.model_results
     if res is not None:
         render_model_results(res)
-        st.markdown("<hr class='rule'>", unsafe_allow_html=True)
-        theme.section("Model diagnostics", kicker="Stage 04b",
-                      sub="ROC / precision-recall curves, hyper-parameter tuning, learning curve.")
-        advanced.render_model_diagnostics(df, res["target"], res["best_model"])
-        st.markdown("<hr class='rule'>", unsafe_allow_html=True)
-        theme.section("Feature engineering & selection", kicker="Stage 04c",
-                      sub="Rank features (F-test + RFE) and measure the impact of selection.")
-        advanced.render_feature_lab(df, res["target"])
-
-with tab_chat:
-    theme.section("Chat with your data", kicker="Stage 05",
-                  sub="Ask questions in natural language — routed to the right agent.")
-    if not llm.available():
-        st.warning("Chat needs a Gemini API key. Use the **EDA** and **Modeling** tabs "
-                   "for the full data-science workflow without one.")
-
-    for msg in st.session_state.history:
-        render_chat_message(msg["role"], msg["content"], intent=msg.get("intent", ""))
-        if msg.get("figures"):
-            render_figures(msg["figures"])
-
-    quick = st.session_state.pop("quick_prompt", None)
-    user_input = st.chat_input("Ask anything about your data…") or quick
-
-    if user_input:
-        render_chat_message("user", user_input)
-        st.session_state.history.append({"role": "user", "content": user_input})
-        with st.spinner("Working…"):
-            try:
-                result = st.session_state.orchestrator.process(
-                    df=df, user_message=user_input, history=st.session_state.history)
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    st.error("Gemini API quota exceeded. EDA/Modeling work without the LLM.")
-                else:
-                    st.error(f"An error occurred: {err}")
-                st.session_state.history.pop()
-                st.stop()
-        if result["cleaned_df"] is not None:
-            st.session_state.df = result["cleaned_df"]
-        render_chat_message("assistant", result["text"], intent=result["intent"])
-        if result["figures"]:
-            render_figures(result["figures"])
-        st.session_state.history.append({
-            "role": "assistant", "content": result["text"],
-            "intent": result["intent"], "figures": result["figures"]})
-        st.rerun()
+        if advanced_mode:
+            st.markdown("<hr class='rule'>", unsafe_allow_html=True)
+            theme.section("Model diagnostics", kicker="Advanced",
+                          sub="ROC / precision-recall curves, hyper-parameter tuning, learning curve.")
+            

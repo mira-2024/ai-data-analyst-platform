@@ -20,6 +20,48 @@ from ui import components as C
 INDIGO, TEAL, MUTED = C.INDIGO, C.TEAL, C.MUTED
 
 
+def render_overview(df: pd.DataFrame) -> None:
+    import insights
+    st.caption("One click runs the whole pipeline - cleaning, analysis and modelling - "
+               "then explains the results in plain language. No data-science background needed.")
+    if st.button("▶  Run full analysis", type="primary", width="stretch", key="btn_auto"):
+        with st.spinner("Cleaning, analysing and modelling your data..."):
+            st.session_state.auto = insights.auto_analysis(df)
+    auto = st.session_state.get("auto")
+    if not auto:
+        st.info("Click **Run full analysis** above to get an instant, plain-language summary "
+                "of what's in your data and what predicts what.")
+        return
+    st.markdown(
+        f"<div style='background:linear-gradient(150deg,{INDIGO},#4646d6);border-radius:16px;"
+        f"padding:20px 24px;color:#fff;box-shadow:0 14px 36px rgba(91,91,240,.28);margin:6px 0 16px;'>"
+        f"<div style='font-family:{C.MONO};font-size:11px;letter-spacing:.08em;text-transform:uppercase;"
+        f"color:rgba(255,255,255,.72);'>Summary</div>"
+        f"<div style='font-family:{C.GROTESK};font-weight:700;font-size:26px;margin-top:4px;'>"
+        f"{C._esc(auto['headline'])}</div></div>", unsafe_allow_html=True)
+    cards = [("Rows", f"{auto['rows']:,}", C.INK), ("Columns", auto["cols"], C.INK),
+             ("Missing", f"{auto['missing_pct']}%", TEAL if auto["missing_pct"] == 0 else C.INK)]
+    res = auto.get("model_results")
+    if res is not None:
+        cards.append((f"Best model ({res['primary_metric'].upper()})",
+                      f"{res['best_score']:.2f}", INDIGO))
+    C._kpi_cards(cards)
+    st.markdown("##### What we found")
+    for f in auto["findings"]:
+        st.markdown(f"- {f}")
+    if res is not None:
+        imp = res.get("feature_importance")
+        if imp is not None and not imp.empty:
+            st.markdown("##### What matters most")
+            st.caption("How much each feature contributes to the prediction.")
+            top = imp.head(8).iloc[::-1]
+            fig = px.bar(top, x="importance", y="feature", orientation="h",
+                         template="plotly_white", color_discrete_sequence=[INDIGO])
+            fig.update_layout(margin=dict(l=0, r=0, t=6, b=0), height=300)
+            st.plotly_chart(fig, use_container_width=True)
+    st.caption("Open the other tabs for the full detail behind each finding.")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Unsupervised: PCA + clustering
 # ──────────────────────────────────────────────────────────────────────────────

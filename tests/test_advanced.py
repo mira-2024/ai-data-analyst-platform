@@ -108,3 +108,20 @@ def test_assumption_checks(clean_df):
     res = statistics.assumption_checks(clean_df, "salary", "department")
     assert res["ok"] is True
     assert "recommended_test" in res
+
+
+
+def test_auto_analysis(clean_df):
+    import insights
+    a = insights.auto_analysis(clean_df)
+    assert a["rows"] == len(clean_df)
+    assert isinstance(a["findings"], list) and len(a["findings"]) >= 3
+    assert a["headline"]
+    assert a["model_results"] is not None
+    assert a["target"] == "promoted"
+
+
+def test_auto_analysis_no_target(messy_df):
+    import insights
+    a = insights.auto_analysis(messy_df)
+    assert isinstance(a["findings"], list) and a["headline"]
