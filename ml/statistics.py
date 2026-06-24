@@ -214,3 +214,64 @@ def feature_target_screen(df: pd.DataFrame, target: str, alpha: float = ALPHA) -
     out = pd.DataFrame(rows)
     out["significant"] = out["p_value"].apply(lambda p: _verdict(p, alpha))
     return out.sort_values("p_value").reset_index(drop=True)
+
+
+def correct_pvalues(pvalues, method: str = "fdr_bh", alpha: float = ALPHA) -> pd.DataFrame:
+    p = np.asarray(pvalues, dtype=float); n = len(p)
+    if n == 0:
+        return pd.DataFrame(columns=["p_value", "p_adjusted", "reject"])
+    if method == "bonferroni":
+        adj = np.minimum(p * n, 1.0)
+    else:
+        order = np.argsort(p)
+        ranked = p[order] * n / (np.arange(n) + 1)
+        ranked = np.minimum.accumulate(ranked[::-1])[::-1]
+        adj = np.empty(n); adj[order] = np.minimum(ranked, 1.0)
+    return pd.DataFrame({"p_value": p.round(6), "p_adjusted": adj.round(6), "reject": adj < alpha})
+
+
+def cohens_d(group_a, group_b) -> float:
+    a = np.asarray(group_a, dtype=float); b = np.asarray(group_b, dtype=float)
+    na, nb = len(a), len(b)
+    if na < 2 or nb < 2:
+        return float("nan")
+    pooled = np.sqrt(((na-1)*a.var(ddof=1) + (nb-1)*b.var(ddof=1)) / (na+nb-2))
+    return float((a.mean()-b.mean())/pooled) if pooled else float("nan")
+
+
+def eta_squared(df, numeric_col, group_col) -> float:
+    sub = df[[numeric_col, group_col]].dropna()
+    grand = sub[numeric_col].mean()
+    ss_total = ((sub[numeric_col]-grand)**2).sum()
+    ss_between = sum(len(g)*(g[numeric_col].mean()-grand)**2 for _, g in sub.groupby(group_col, observed=True))
+    return float(ss_between/ss_total) if ss_total else float("nan")
+
+
+def confidence_interval(series, confidence: float = 0.95) -> dict:
+    s = pd.to_numeric(series, errors="coerce").dropna(); n = len(s)
+    if n < 2:
+        return {"mean": float(s.mean()) if n else float("nan"), "low": float("nan"), "high": float("nan"), "n": n}
+    se = s.std(ddof=1)/np.sqrt(n)
+    margin = stats.t.ppf(0.5+confidence/2, df=n-1)*se
+    return {"mean": round(float(s.mean()),4), "low": round(float(s.mean()-margin),4),
+            "high": round(float(s.mean()+margin),4), "n": int(n), "confidence": confidence}
+
+
+def assumption_checks(df, numeric_col, group_col, alpha: float = ALPHA) -> dict:
+    sub = df[[numeric_col, group_col]].dropna()
+    groups = [g[numeric_col].values for _, g in sub.groupby(group_col, observed=True) if len(g) >= 3]
+    if len(groups) < 2:
+        return {"ok": False, "note": "need >= 2 groups with >= 3 observations"}
+    normal_flags = []
+    for g in groups:
+        normal_flags.append((stats.shapiro(g)[1] if len(g) <= 5000 else stats.normaltest(g)[1]) >= alpha)
+    all_normal = all(normal_flags)
+    lev_p = float(stats.levene(*groups)[1]); equal_var = lev_p >= alpha
+    if not all_normal:
+        rec = ("Mann-Whitney U" if len(groups) == 2 else "Kruskal-Wallis") + " (non-parametric)"
+    elif len(groups) == 2:
+        rec = "Student t-test" if equal_var else "Welch t-test"
+    else:
+        rec = "one-way ANOVA" if equal_var else "Welch ANOVA"
+    return {"ok": True, "n_groups": len(groups), "all_groups_normal": bool(all_normal),
+            "equal_variance": bool(equal_var), "levene_p": round(lev_p,4), "recommended_test": rec}

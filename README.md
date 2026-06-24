@@ -65,8 +65,11 @@ language model**. The `agents/` are thin orchestration wrappers around it.
 | Module | Responsibility | Methods |
 |---|---|---|
 | `ml/eda.py` | Exploratory Data Analysis | dataset profiling, descriptive statistics (incl. skewness, excess kurtosis, coefficient of variation), categorical entropy, missing-value analysis, IQR + z-score outlier detection, correlation matrices |
-| `ml/statistics.py` | Inferential statistics | Shapiro-Wilk / D'Agostino normality tests, Pearson & Spearman correlation significance, Welch's t-test, one-way ANOVA, chi-square test of independence (with Cramér's V), automatic feature-vs-target screening |
-| `ml/modeling.py` | Supervised machine learning | automatic task detection, leakage-safe preprocessing pipeline, cross-validated training of Logistic/Linear Regression, Random Forest and Gradient Boosting, held-out evaluation, permutation feature importance |
+| `ml/statistics.py` | Inferential statistics | normality tests, correlation significance, Welch's t-test, one-way ANOVA, chi-square (with Cramér's V), feature-vs-target screening, **multiple-testing correction (Bonferroni/FDR), Cohen's d & eta-squared effect sizes, confidence intervals, assumption checks** |
+| `ml/modeling.py` | Supervised machine learning | task detection, leakage-safe preprocessing, cross-validated Logistic/Linear Regression, Random Forest & Gradient Boosting, held-out evaluation, permutation feature importance |
+| `ml/diagnostics.py` | Model diagnostics | ROC & precision-recall curves, GridSearchCV hyper-parameter tuning, learning curves |
+| `ml/unsupervised.py` | Unsupervised learning | PCA (explained variance, loadings, 2-D projection), KMeans clustering with automatic k (silhouette + elbow), cluster profiles |
+| `ml/feature_engineering.py` | Feature selection | univariate F-test ranking, Recursive Feature Elimination, selection-impact measurement, engineered interaction features |
 
 See `docs/METHODOLOGY.md` for the full statistical and modelling methodology.
 

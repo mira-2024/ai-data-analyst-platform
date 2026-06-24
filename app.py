@@ -18,6 +18,7 @@ from orchestrator.orchestrator import Orchestrator
 from agents.modeling_agent import ModelingAgent
 from ml import modeling
 from ui import theme
+from ui import advanced
 from ui.components import (
     render_data_preview,
     render_eda,
@@ -113,7 +114,8 @@ df = st.session_state.df
 theme.section("Workspace", kicker="DataFlow AI",
               sub=f"Sample run · {df.shape[0]:,} rows · {df.shape[1]} columns loaded.")
 
-tab_data, tab_eda, tab_model, tab_chat = st.tabs(["Data Preview", "EDA", "Modeling", "Chat"])
+tab_data, tab_eda, tab_cluster, tab_model, tab_chat = st.tabs(
+    ["Data Preview", "EDA", "Clustering", "Modeling", "Chat"])
 
 with tab_data:
     render_data_preview(df)
@@ -122,6 +124,15 @@ with tab_eda:
     theme.section("Exploratory Data Analysis", kicker="Stage 02 · 03",
                   sub="Descriptive + inferential statistics, computed live with pandas & SciPy.")
     render_eda(df)
+    with st.expander("Deeper inferential statistics — confidence intervals, "
+                     "assumption checks & multiple-testing (FDR) correction"):
+        advanced.render_deeper_statistics(df)
+
+with tab_cluster:
+    theme.section("Unsupervised Learning", kicker="Stage 02b",
+                  sub="PCA dimensionality reduction and KMeans clustering with automatic k "
+                      "(silhouette + elbow) — finds structure with no labels.")
+    advanced.render_clustering(df)
 
 with tab_model:
     theme.section("Predictive Modeling", kicker="Stage 04",
@@ -140,8 +151,18 @@ with tab_model:
             st.error(out["text"])
         else:
             st.session_state.model_results = out["results"]
-    if st.session_state.model_results is not None:
-        render_model_results(st.session_state.model_results)
+
+    res = st.session_state.model_results
+    if res is not None:
+        render_model_results(res)
+        st.markdown("<hr class='rule'>", unsafe_allow_html=True)
+        theme.section("Model diagnostics", kicker="Stage 04b",
+                      sub="ROC / precision-recall curves, hyper-parameter tuning, learning curve.")
+        advanced.render_model_diagnostics(df, res["target"], res["best_model"])
+        st.markdown("<hr class='rule'>", unsafe_allow_html=True)
+        theme.section("Feature engineering & selection", kicker="Stage 04c",
+                      sub="Rank features (F-test + RFE) and measure the impact of selection.")
+        advanced.render_feature_lab(df, res["target"])
 
 with tab_chat:
     theme.section("Chat with your data", kicker="Stage 05",
@@ -168,13 +189,11 @@ with tab_chat:
             except Exception as e:
                 err = str(e)
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    st.error("**Gemini API quota exceeded.** The EDA and Modeling tabs still "
-                             "work without the LLM. Add a fresh key to `.env` or wait for reset.")
+                    st.error("Gemini API quota exceeded. EDA/Modeling work without the LLM.")
                 else:
                     st.error(f"An error occurred: {err}")
                 st.session_state.history.pop()
                 st.stop()
-
         if result["cleaned_df"] is not None:
             st.session_state.df = result["cleaned_df"]
         render_chat_message("assistant", result["text"], intent=result["intent"])

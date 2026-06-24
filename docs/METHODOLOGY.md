@@ -137,14 +137,60 @@ measured. This is model-agnostic (works for linear and tree models alike) and,
 because it is measured on unseen data, reflects genuine predictive contribution
 rather than in-sample fit.
 
-## 6. Reporting
+### 5.6 Model diagnostics (`ml/diagnostics.py`)
+A single accuracy number is not enough to trust a model. The platform also
+reports:
+
+- **ROC and precision-recall curves** with AUC / average precision (per class
+  for multi-class problems via one-vs-rest), computed on the held-out set.
+- **Hyper-parameter tuning** with `GridSearchCV`, reporting the default vs tuned
+  cross-validated score and the chosen parameters.
+- **Learning curves** (score vs training-set size for both training and
+  cross-validation), which reveal over-fitting (a large train/CV gap) or
+  under-fitting (both scores low and flat).
+
+## 6. Unsupervised Learning (`ml/unsupervised.py`)
+
+Beyond prediction, the platform searches for structure without labels.
+
+### 6.1 Principal Component Analysis
+After standardising the numeric features, PCA reduces dimensionality. The
+explained-variance ratio of each component, the cumulative variance, the number
+of components needed to retain 90% of the variance, and the feature loadings on
+the first two components are reported, with a 2-D projection for visualisation.
+
+### 6.2 KMeans clustering with automatic k
+KMeans is run on the standardised features. The number of clusters is selected
+**automatically** by choosing the value of k that maximises the mean
+**silhouette score**, with the **inertia (elbow) curve** reported alongside.
+The result includes per-cluster feature profiles and a PCA projection coloured
+by cluster.
+
+## 7. Feature Engineering & Selection (`ml/feature_engineering.py`)
+
+A **univariate F-test** ranks features by their individual relationship to the
+target, and **Recursive Feature Elimination** confirms this with a model-based
+wrapper method. The **impact** of selection is quantified by comparing
+cross-validated performance using all features versus the top-k, and a simple
+**engineered interaction term** illustrates feature construction.
+
+## 8. Statistical Rigor (`ml/statistics.py`)
+
+- **Multiple-testing correction** (Bonferroni and Benjamini-Hochberg FDR).
+- **Effect sizes** — Cohen's *d* and *eta-squared* — because significance is not
+  the same as practical importance.
+- **Confidence intervals** for means (t-distribution based).
+- **Assumption checks** — normality (Shapiro-Wilk) and equal variance (Levene) —
+  that recommend the correct test rather than applying one blindly.
+
+## 9. Reporting
 
 `agents/report_agent.py` assembles the computed profile, statistics, missing-value
 analysis and significant correlations into a structured report. When an LLM is
 configured, an executive summary and recommendations are added — but they are
 explicitly constrained to interpret only the computed numbers.
 
-## 7. Reproducibility and Limitations
+## 10. Reproducibility and Limitations
 
 - **Reproducibility:** a fixed random seed (42) governs all stochastic steps;
   no result depends on an LLM.
