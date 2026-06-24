@@ -1,0 +1,11 @@
+# DataFlow AI — editorial light theme
+[theme]
+base = "light"
+primaryColor = "#4F46E5"          # electric indigo accent
+backgroundColor = "#FBFBF9"       # warm paper white
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F1222"             # ink
+font = "sans serif"
+
+[server]
+runOnSave = true

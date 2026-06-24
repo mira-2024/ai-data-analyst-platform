@@ -1,38 +1,65 @@
-import os
-import pandas as pd
-from google import genai
-from dotenv import load_dotenv
-from utils.data_utils import get_df_summary, get_data_sample
+"""
+ReportAgent — automated reporting agent.
 
-load_dotenv()
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-2.5-flash"
+Assembles a professional, reproducible report from real computed statistics
+(EDA + significance tests) and, when available, an LLM-written executive
+summary and recommendations grounded in those numbers.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from ml import eda, statistics
+from utils import llm
 
 
 class ReportAgent:
     def generate(self, df: pd.DataFrame, prior_analysis: str = "") -> str:
-        summary = get_df_summary(df)
-        sample = get_data_sample(df, n=10)
-        prior_section = f"\nPrior Analysis:\n{prior_analysis}\n" if prior_analysis else ""
+        profile = eda.profile_dataset(df)
+        desc = eda.descriptive_stats(df)
+        missing = eda.missing_analysis(df)
+        top_corr = statistics.correlation_significance(df).head(5)
 
-        prompt = f"""You are a senior data analyst writing a professional data report.
-Generate a comprehensive markdown report with the following sections:
+        parts = [
+            "# Data Analysis Report",
+            "",
+            "## 1. Dataset Overview",
+            "",
+            f"- **Rows:** {profile['n_rows']:,}",
+            f"- **Columns:** {profile['n_cols']} "
+            f"({profile['n_numeric']} numeric, {profile['n_categorical']} categorical, "
+            f"{profile['n_datetime']} datetime)",
+            f"- **Missing cells:** {profile['missing_cells']:,} ({profile['missing_pct']}%)",
+            f"- **Duplicate rows:** {profile['duplicate_rows']} ({profile['duplicate_pct']}%)",
+            f"- **Memory:** {profile['memory_kb']} KB",
+        ]
 
-1. **Executive Summary** — 2-3 sentence overview
-2. **Dataset Overview** — shape, columns, data types, missing values
-3. **Key Statistics** — important numeric stats
-4. **Key Findings** — top 5 insights from the data
-5. **Recommendations** — 3 actionable recommendations based on the data
-6. **Conclusion** — brief closing statement
+        if not desc.empty:
+            parts += ["", "## 2. Key Statistics", "", desc.to_markdown()]
 
-Dataset Summary:
-{summary}
+        if not missing.empty:
+            parts += ["", "## 3. Missing-Value Profile", "", missing.to_markdown()]
+        else:
+            parts += ["", "## 3. Missing-Value Profile", "",
+                      "_No missing values detected._"]
 
-Sample Data:
-{sample}
-{prior_section}
+        if not top_corr.empty:
+            parts += ["", "## 4. Strongest Correlations (with significance)", "",
+                      top_corr.to_markdown(index=False)]
 
-Write in a professional tone. Use tables where appropriate. Be specific with numbers.
-"""
-        response = _client.models.generate_content(model=MODEL, contents=prompt)
-        return response.text.strip()
+        deterministic = "\n".join(parts)
+
+        # Optional LLM-written executive summary + recommendations.
+        prompt = (
+            "You are a senior data analyst. Based ONLY on the computed report below "
+            "(do not invent numbers), write two short sections in markdown:\n"
+            "## Executive Summary (2-3 sentences)\n"
+            "## Recommendations (3 concrete, data-driven bullet points)\n\n"
+            f"{deterministic}"
+            + (f"\n\nPrior analysis context:\n{prior_analysis}" if prior_analysis else "")
+        )
+        narrative = llm.narrate(prompt)
+        if narrative:
+            return narrative + "\n\n---\n\n" + deterministic
+        return deterministic

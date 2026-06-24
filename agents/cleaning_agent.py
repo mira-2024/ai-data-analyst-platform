@@ -1,61 +1,87 @@
-import os
-import pandas as pd
-from google import genai
-from dotenv import load_dotenv
-from utils.data_utils import get_df_summary
+"""
+CleaningAgent — data preparation agent.
 
-load_dotenv()
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-2.5-flash"
+Performs deterministic, auditable cleaning steps and returns both the cleaned
+DataFrame and a transparent log of exactly what changed. The LLM is used only
+to phrase a friendly summary, and is optional.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from utils.data_utils import get_df_summary
+from utils import llm
 
 
 class CleaningAgent:
     def clean(self, df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         original_shape = df.shape
-        report_lines = [f"Original shape: {original_shape[0]} rows × {original_shape[1]} columns"]
+        df = df.copy()  # never mutate the caller's DataFrame
+        report_lines = [
+            f"- **Original shape:** {original_shape[0]} rows x {original_shape[1]} columns"
+        ]
 
         df = df.dropna(how="all")
         df = df.dropna(axis=1, how="all")
 
-        dups = df.duplicated().sum()
+        dups = int(df.duplicated().sum())
         if dups > 0:
             df = df.drop_duplicates()
-            report_lines.append(f"Removed {dups} duplicate rows.")
+            report_lines.append(f"- Removed **{dups}** duplicate rows.")
 
+        # Trim whitespace on text columns. Strip only non-null cells so genuine
+        # missing values stay NaN and are imputed below (astype(str) on the whole
+        # column would turn NaN into the literal string "nan").
         str_cols = df.select_dtypes(include="object").columns
         for col in str_cols:
-            df[col] = df[col].str.strip()
+            mask = df[col].notna()
+            df.loc[mask, col] = df.loc[mask, col].astype(str).str.strip()
 
+        # Impute missing numeric values with the median (robust to outliers).
         num_cols = df.select_dtypes(include="number").columns
         filled_num = 0
         for col in num_cols:
-            nulls = df[col].isnull().sum()
+            nulls = int(df[col].isnull().sum())
             if nulls > 0:
                 df[col] = df[col].fillna(df[col].median())
                 filled_num += nulls
         if filled_num:
-            report_lines.append(f"Filled {filled_num} missing numeric values with column medians.")
+            report_lines.append(
+                f"- Imputed **{filled_num}** missing numeric values with the column median."
+            )
 
+        # Impute missing categorical values with the mode.
         filled_cat = 0
         for col in str_cols:
-            nulls = df[col].isnull().sum()
+            nulls = int(df[col].isnull().sum())
             if nulls > 0:
                 mode_val = df[col].mode()
                 df[col] = df[col].fillna(mode_val[0] if not mode_val.empty else "Unknown")
                 filled_cat += nulls
         if filled_cat:
-            report_lines.append(f"Filled {filled_cat} missing categorical values with column modes.")
+            report_lines.append(
+                f"- Imputed **{filled_cat}** missing categorical values with the column mode."
+            )
 
-        report_lines.append(f"Cleaned shape: {df.shape[0]} rows × {df.shape[1]} columns")
+        if filled_num == 0 and filled_cat == 0 and dups == 0:
+            report_lines.append("- No duplicates or missing values were found — data was already clean.")
 
+        report_lines.append(
+            f"- **Cleaned shape:** {df.shape[0]} rows x {df.shape[1]} columns"
+        )
+
+        deterministic = "### Data Cleaning Report\n\n" + "\n".join(report_lines)
+
+        # Optional LLM phrasing.
         summary = get_df_summary(df)
-        prompt = f"""You are a data cleaning assistant. Summarize the cleaning steps taken and the current state of the dataset in 3-5 clear bullet points. Be concise.
-
-Cleaning steps performed:
-{chr(10).join(report_lines)}
-
-Cleaned dataset summary:
-{summary}"""
-
-        response = _client.models.generate_content(model=MODEL, contents=prompt)
-        return df, response.text.strip()
+        prompt = (
+            "You are a data preparation assistant. In 2-3 sentences, summarise the "
+            "cleaning that was performed and confirm the dataset is ready for "
+            f"analysis. Be concise.\n\nSteps:\n{chr(10).join(report_lines)}\n\n"
+            f"Cleaned dataset:\n{summary}"
+        )
+        narration = llm.narrate(prompt)
+        if narration:
+            return df, deterministic + "\n\n" + narration
+        return df, deterministic
