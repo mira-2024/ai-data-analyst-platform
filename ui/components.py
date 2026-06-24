@@ -69,6 +69,20 @@ def _fmt(x) -> str:
     return _esc(x)
 
 
+def format_pvalues(frame: pd.DataFrame, cols) -> pd.DataFrame:
+    """Display tiny p-values as scientific notation instead of long 0.000...0 strings."""
+    def fp(p):
+        if not isinstance(p, (int, float, np.integer, np.floating)) or pd.isna(p):
+            return p
+        p = float(p)
+        return f"{p:.2e}" if 0 < p < 1e-3 else f"{p:.4f}"
+    out = frame.copy()
+    for c in cols:
+        if c in out.columns:
+            out[c] = out[c].map(fp)
+    return out
+
+
 def _card_open(title: str, meta: str = "") -> str:
     head = (
         f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;'>"
@@ -321,7 +335,7 @@ def render_eda(df: pd.DataFrame):
     sig = statistics.correlation_significance(df) if not corr.empty else pd.DataFrame()
     if isinstance(sig, pd.DataFrame) and not sig.empty:
         with st.expander("Correlation significance (Pearson, with p-values)"):
-            st.dataframe(sig.head(15), width="stretch")
+            st.dataframe(format_pvalues(sig.head(15), ["p_value"]), width="stretch")
 
     # Secondary dense tables stay as interactive dataframes inside styled cards
     cats = eda.categorical_summary(df)

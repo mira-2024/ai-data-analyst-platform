@@ -226,3 +226,29 @@ def top_correlations(df: pd.DataFrame, method: str = "pearson", n: int = 10) -> 
         return pd.DataFrame()
     out = pd.DataFrame(pairs).sort_values("abs_correlation", ascending=False)
     return out.drop(columns="abs_correlation").head(n).reset_index(drop=True)
+
+
+def data_health_warnings(df: pd.DataFrame) -> list[str]:
+    """Return human-readable warnings about a dataset's structure/quality."""
+    warns = []
+    n_cols = df.shape[1]
+    unnamed = [c for c in df.columns if str(c).startswith("Unnamed")]
+    if unnamed:
+        warns.append(
+            f"⚠️ {len(unnamed)} of {n_cols} columns have no header name "
+            f'("Unnamed: ..."). Your file is likely missing a header row or has an '
+            f"extra index column, so the analysis will be unreliable. Re-export the "
+            f"CSV with a proper header row, or load a different file.")
+    if df.columns.duplicated().any():
+        dups = df.columns[df.columns.duplicated()].unique().tolist()
+        warns.append("⚠️ Duplicate column names detected ("
+                     + ", ".join(map(str, dups[:5])) + "). Rename them so each column is distinct.")
+    if n_cols > 50 and n_cols > df.shape[0]:
+        warns.append(
+            f"⚠️ This dataset is very wide ({n_cols} columns vs {df.shape[0]} rows). "
+            f"High-dimensional, short data tends to give noisy, hard-to-trust results.")
+    if df.shape[0] < 20:
+        warns.append(
+            f"ℹ️ Only {df.shape[0]} rows - modeling needs at least 20, and statistics "
+            f"on very small samples are unstable.")
+    return warns

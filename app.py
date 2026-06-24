@@ -16,7 +16,7 @@ from utils.file_handler import load_file
 from utils import llm
 from orchestrator.orchestrator import Orchestrator
 from agents.modeling_agent import ModelingAgent
-from ml import modeling
+from ml import modeling, eda
 from ui import theme
 from ui import advanced
 from ui.components import (
@@ -73,10 +73,12 @@ with st.sidebar:
 
         st.markdown("<hr class='rule'>", unsafe_allow_html=True)
         st.markdown("<div class='kicker'>Quick actions</div>", unsafe_allow_html=True)
+        st.caption("Runs an agent - the answer appears in the **Chat** tab.")
         for qp in ["Clean the data", "Analyse the dataset", "Build a predictive model",
                    "Visualize the data", "Generate a full report"]:
             if st.button(qp, width="stretch"):
                 st.session_state["quick_prompt"] = qp
+                st.toast("Running " + qp + " - see the Chat tab.", icon="💬")
         st.markdown("<hr class='rule'>", unsafe_allow_html=True)
         replace = st.file_uploader("Replace dataset", type=["csv", "xlsx", "xls", "json"])
         if replace is not None:
@@ -112,7 +114,10 @@ df = st.session_state.df
 
 # ── Workspace ────────────────────────────────────────────────────────────────
 theme.section("Workspace", kicker="DataFlow AI",
-              sub=f"Sample run · {df.shape[0]:,} rows · {df.shape[1]} columns loaded.")
+              sub=f"{df.shape[0]:,} rows · {df.shape[1]} columns loaded.")
+
+for _w in eda.data_health_warnings(df):
+    st.warning(_w)
 
 tab_data, tab_eda, tab_cluster, tab_model, tab_chat = st.tabs(
     ["Data Preview", "EDA", "Clustering", "Modeling", "Chat"])
