@@ -143,7 +143,7 @@ _HERO = """
  .stats{display:flex;gap:30px;border-top:1px solid #ECECE6;padding-top:18px;}
  .stat .v{font-family:'Space Grotesk';font-weight:700;font-size:28px;letter-spacing:-.02em;}
  .stat .l{font-size:13px;color:#6B7280;margin-top:2px;}
- .r{position:relative;height:clamp(320px,42vw,460px);min-width:0;}
+ .r{position:relative;height:clamp(380px,50vw,580px);min-width:0;}
  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
  .card{position:absolute;padding:10px 14px;background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
    border:1px solid #ECECE6;border-radius:13px;box-shadow:0 10px 30px rgba(15,18,34,.08);}
@@ -177,7 +177,7 @@ function init(t){t=t||0;var THREE=window.THREE,cv=document.getElementById('cv');
  if(!THREE||!cv){if(t<60)setTimeout(function(){init(t+1);},100);return;}
  var r=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});r.setPixelRatio(Math.min(window.devicePixelRatio,2));
  var sc=new THREE.Scene();sc.fog=new THREE.FogExp2(0xFBFBF9,0.022);
- var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,7);
+ var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,5.7);
  var g=new THREE.Group();sc.add(g);
  g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(2.0,1),new THREE.MeshBasicMaterial({color:0x5B5BF0,wireframe:true,transparent:true,opacity:0.24})));
  var inner=new THREE.Mesh(new THREE.IcosahedronGeometry(1.2,0),new THREE.MeshBasicMaterial({color:0x15B8A6,wireframe:true,transparent:true,opacity:0.22}));g.add(inner);

@@ -98,10 +98,10 @@ with st.sidebar:
 
 # ── Landing ────────────────────────────────────────────────────────────────────
 if st.session_state.df is None:
-    theme.hero(height=470)
+    theme.hero(height=560)
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-    _, mid, _ = st.columns([1.45, 1.1, 1.45])
+    mid, _ = st.columns([1.25, 1.75])
     with mid:
         if st.button("🚀  Try with sample data", type="primary", width="stretch"):
             _load_df(pd.read_csv(SAMPLE_PATH)); st.rerun()
