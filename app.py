@@ -98,11 +98,10 @@ with st.sidebar:
 
 # ── Landing ────────────────────────────────────────────────────────────────────
 if st.session_state.df is None:
-    theme.hero(height=560)
-
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-    mid, _ = st.columns([1.25, 1.75])
-    with mid:
+    hL, hR = st.columns([1.05, 0.92], gap="large")
+    with hL:
+        st.markdown(theme.HERO_COPY, unsafe_allow_html=True)
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
         if st.button("🚀  Try with sample data", type="primary", width="stretch"):
             _load_df(pd.read_csv(SAMPLE_PATH)); st.rerun()
         up = st.file_uploader("…or upload your own (CSV / Excel / JSON)",
@@ -112,8 +111,11 @@ if st.session_state.df is None:
                 _load_df(load_file(up)); st.rerun()
             except Exception as e:
                 st.error(f"Error loading file: {e}")
+        st.markdown(theme.HERO_STATS, unsafe_allow_html=True)
+    with hR:
+        theme.hero_canvas(height=520)
 
-    st.markdown("<div style='height:26px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     theme.landing_sections(height=560)
     st.stop()
 
@@ -186,4 +188,47 @@ with tab_model:
             st.markdown("<hr class='rule'>", unsafe_allow_html=True)
             theme.section("Model diagnostics", kicker="Advanced",
                           sub="ROC / precision-recall curves, hyper-parameter tuning, learning curve.")
-            
+            advanced.render_model_diagnostics(df, res["target"], res["best_model"])
+            st.markdown("<hr class='rule'>", unsafe_allow_html=True)
+            theme.section("Feature engineering & selection", kicker="Advanced",
+                          sub="Rank features (F-test + RFE) and measure the impact of selection.")
+            advanced.render_feature_lab(df, res["target"])
+
+with tab_chat:
+    theme.section("Chat with your data", kicker="Stage 05",
+                  sub="Ask questions in natural language — routed to the right agent.")
+    if not llm.available():
+        st.warning("Chat needs a Gemini API key. Use the **EDA** and **Modeling** tabs "
+                   "for the full data-science workflow without one.")
+
+    for msg in st.session_state.history:
+        render_chat_message(msg["role"], msg["content"], intent=msg.get("intent", ""))
+        if msg.get("figures"):
+            render_figures(msg["figures"])
+
+    quick = st.session_state.pop("quick_prompt", None)
+    user_input = st.chat_input("Ask anything about your data…") or quick
+
+    if user_input:
+        render_chat_message("user", user_input)
+        st.session_state.history.append({"role": "user", "content": user_input})
+        with st.spinner("Working…"):
+            try:
+                result = st.session_state.orchestrator.process(
+                    df=df, user_message=user_input, history=st.session_state.history)
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                    st.error("**Gemini API quota exceeded.** The EDA and Modeling tabs still "
+                             "work without the LLM. Add a fresh key to `.env` or wait for reset.")
+                else:
+                    st.error(f"An error occurred: {err}")
+                st.session_state.history.pop()
+                st.stop()
+
+        if result["cleaned_df"] is not None:
+            st.session_state.df = result["cleaned_df"]
+        render_chat_message("assistant", result["text"], intent=result["intent"])
+        if result["figures"]:
+            render_figures(result["figures"])
+        st.session_state.history.appe
