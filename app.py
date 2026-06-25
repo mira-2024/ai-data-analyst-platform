@@ -113,7 +113,7 @@ if st.session_state.df is None:
                 st.error(f"Error loading file: {e}")
         st.markdown(theme.HERO_STATS, unsafe_allow_html=True)
     with hR:
-        theme.hero_canvas(height=520)
+        theme.hero_canvas(height=640)
 
     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     theme.landing_sections(height=560)
