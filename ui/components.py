@@ -535,6 +535,17 @@ def render_model_results(res: dict):
     with c2:
         st.markdown(leaderboard, unsafe_allow_html=True)
 
+    if res["task"] == "classification":
+        acc = float(best_row.get("accuracy", score))
+        st.info(f"**In plain terms:** on data it has never seen, this model predicts "
+                f"`{res['target']}` correctly about **{acc:.0%}** of the time. The F1 score "
+                f"({score:.2f}) balances catching real cases against false alarms - "
+                f"1.0 is perfect, ~0.5 is guessing.")
+    else:
+        st.info(f"**In plain terms:** this model explains about **{max(0.0, score):.0%}** of why "
+                f"`{res['target']}` varies (R2 = {score:.2f}). The rest is noise or factors not "
+                f"captured in the data.")
+
     imp = res.get("feature_importance")
     cm = res.get("confusion_matrix")
     has_imp = isinstance(imp, pd.DataFrame) and not imp.empty
