@@ -177,7 +177,7 @@ function init(t){t=t||0;var THREE=window.THREE,cv=document.getElementById('cv');
  if(!THREE||!cv){if(t<60)setTimeout(function(){init(t+1);},100);return;}
  var r=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});r.setPixelRatio(Math.min(window.devicePixelRatio,2));
  var sc=new THREE.Scene();sc.fog=new THREE.FogExp2(0xFBFBF9,0.022);
- var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,4.7);
+ var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,4.4);
  var g=new THREE.Group();sc.add(g);
  g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(2.0,1),new THREE.MeshBasicMaterial({color:0x5B5BF0,wireframe:true,transparent:true,opacity:0.24})));
  var inner=new THREE.Mesh(new THREE.IcosahedronGeometry(1.2,0),new THREE.MeshBasicMaterial({color:0x15B8A6,wireframe:true,transparent:true,opacity:0.22}));g.add(inner);
@@ -186,7 +186,7 @@ function init(t){t=t||0;var THREE=window.THREE,cv=document.getElementById('cv');
  function cloud(n,c,sz,op,rmin,rsp){
    var home=new Float32Array(n*3),pos=new Float32Array(n*3);
    for(var i=0;i<n;i++){var rr=rmin+Math.random()*rsp,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
-     home[i*3]=rr*Math.sin(ph)*Math.cos(th);home[i*3+1]=rr*Math.sin(ph)*Math.sin(th)*0.74;home[i*3+2]=rr*Math.cos(ph);
+     home[i*3]=rr*Math.sin(ph)*Math.cos(th);home[i*3+1]=rr*Math.sin(ph)*Math.sin(th)*0.95;home[i*3+2]=rr*Math.cos(ph);
      pos[i*3]=home[i*3];pos[i*3+1]=home[i*3+1];pos[i*3+2]=home[i*3+2];}
    var gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(pos,3));
    var pt=new THREE.Points(gg,new THREE.PointsMaterial({color:c,size:sz,transparent:true,opacity:op,sizeAttenuation:true,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -251,13 +251,13 @@ function init(t){t=t||0;var THREE=window.THREE,cv=document.getElementById('cv');
  if(!THREE||!cv){if(t<60)setTimeout(function(){init(t+1);},100);return;}
  var r=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});r.setPixelRatio(Math.min(window.devicePixelRatio,2));
  var sc=new THREE.Scene();sc.fog=new THREE.FogExp2(0xFBFBF9,0.022);
- var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,4.7);
+ var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,4.4);
  var g=new THREE.Group();sc.add(g);
  g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(2.0,1),new THREE.MeshBasicMaterial({color:0x5B5BF0,wireframe:true,transparent:true,opacity:0.24})));
  var inner=new THREE.Mesh(new THREE.IcosahedronGeometry(1.2,0),new THREE.MeshBasicMaterial({color:0x15B8A6,wireframe:true,transparent:true,opacity:0.22}));g.add(inner);
  function cloud(n,c,sz,op,rmin,rsp){var home=new Float32Array(n*3),pos=new Float32Array(n*3);
    for(var i=0;i<n;i++){var rr=rmin+Math.random()*rsp,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
-     home[i*3]=rr*Math.sin(ph)*Math.cos(th);home[i*3+1]=rr*Math.sin(ph)*Math.sin(th)*0.74;home[i*3+2]=rr*Math.cos(ph);
+     home[i*3]=rr*Math.sin(ph)*Math.cos(th);home[i*3+1]=rr*Math.sin(ph)*Math.sin(th)*0.95;home[i*3+2]=rr*Math.cos(ph);
      pos[i*3]=home[i*3];pos[i*3+1]=home[i*3+1];pos[i*3+2]=home[i*3+2];}
    var gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(pos,3));
    var pt=new THREE.Points(gg,new THREE.PointsMaterial({color:c,size:sz,transparent:true,opacity:op,sizeAttenuation:true,blending:THREE.AdditiveBlending,depthWrite:false}));
