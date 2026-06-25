@@ -165,8 +165,6 @@ _HERO = """
   </div>
   <div class='r'>
     <canvas id='cv'></canvas>
-    <div class='card' style='left:4%;top:8%;animation:fl 6s ease-in-out infinite;'><div class='k'>rows &times; cols</div><div class='b'>30 &times; 10</div></div>
-    <div class='card' style='right:3%;bottom:12%;animation:fl 7.5s ease-in-out infinite;animation-delay:-2s;'><div class='k'>best F1</div><div class='b' style='color:#15B8A6;'>0.857</div></div>
   </div>
 </div>
 <script>
@@ -174,22 +172,48 @@ document.querySelectorAll('[data-cu]').forEach(function(el){
   var tgt=parseFloat(el.dataset.cu),suf=el.dataset.suf||'',s=performance.now(),d=1100,e=function(x){return 1-Math.pow(1-x,3);};
   (function tick(n){var k=Math.min(1,(n-s)/d);el.textContent=Math.round(tgt*e(k))+suf;if(k<1)requestAnimationFrame(tick);else el.textContent=Math.round(tgt)+suf;})(s);
 });
-var mx=0,my=0;
-window.addEventListener('pointermove',function(ev){mx=ev.clientX/window.innerWidth-0.5;my=ev.clientY/window.innerHeight-0.5;});
+var mx=0,my=0,hover=0,hoverT=0;
 function init(t){t=t||0;var THREE=window.THREE,cv=document.getElementById('cv');
  if(!THREE||!cv){if(t<60)setTimeout(function(){init(t+1);},100);return;}
  var r=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});r.setPixelRatio(Math.min(window.devicePixelRatio,2));
- var sc=new THREE.Scene();sc.fog=new THREE.FogExp2(0xFBFBF9,0.025);
+ var sc=new THREE.Scene();sc.fog=new THREE.FogExp2(0xFBFBF9,0.022);
  var cam=new THREE.PerspectiveCamera(45,1,0.1,100);cam.position.set(0,0,7);
  var g=new THREE.Group();sc.add(g);
- g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(2.0,1),new THREE.MeshBasicMaterial({color:0x5B5BF0,wireframe:true,transparent:true,opacity:0.26})));
- var inner=new THREE.Mesh(new THREE.IcosahedronGeometry(1.2,0),new THREE.MeshBasicMaterial({color:0x15B8A6,wireframe:true,transparent:true,opacity:0.24}));g.add(inner);
- function cloud(n,c,sz,op,rmin,rsp){var p=new Float32Array(n*3);for(var i=0;i<n;i++){var rr=rmin+Math.random()*rsp,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);p[i*3]=rr*Math.sin(ph)*Math.cos(th);p[i*3+1]=rr*Math.sin(ph)*Math.sin(th)*0.74;p[i*3+2]=rr*Math.cos(ph);}var gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(p,3));var pt=new THREE.Points(gg,new THREE.PointsMaterial({color:c,size:sz,transparent:true,opacity:op,sizeAttenuation:true,blending:THREE.AdditiveBlending,depthWrite:false}));g.add(pt);return pt;}
- var cA=cloud(1100,0x5B5BF0,0.05,0.85,2.3,1.7),cB=cloud(520,0x15B8A6,0.055,0.7,1.5,1.1);
+ g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(2.0,1),new THREE.MeshBasicMaterial({color:0x5B5BF0,wireframe:true,transparent:true,opacity:0.24})));
+ var inner=new THREE.Mesh(new THREE.IcosahedronGeometry(1.2,0),new THREE.MeshBasicMaterial({color:0x15B8A6,wireframe:true,transparent:true,opacity:0.22}));g.add(inner);
+ // interactive clouds: each point has a "home" on a sphere; the field slowly
+ // spins, and points rush toward the cursor then spring back when it leaves.
+ function cloud(n,c,sz,op,rmin,rsp){
+   var home=new Float32Array(n*3),pos=new Float32Array(n*3);
+   for(var i=0;i<n;i++){var rr=rmin+Math.random()*rsp,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+     home[i*3]=rr*Math.sin(ph)*Math.cos(th);home[i*3+1]=rr*Math.sin(ph)*Math.sin(th)*0.74;home[i*3+2]=rr*Math.cos(ph);
+     pos[i*3]=home[i*3];pos[i*3+1]=home[i*3+1];pos[i*3+2]=home[i*3+2];}
+   var gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(pos,3));
+   var pt=new THREE.Points(gg,new THREE.PointsMaterial({color:c,size:sz,transparent:true,opacity:op,sizeAttenuation:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+   sc.add(pt);return {pt:pt,home:home,pos:pos,n:n,geo:gg};}
+ var clouds=[cloud(1300,0x5B5BF0,0.05,0.9,2.3,1.7),cloud(640,0x15B8A6,0.055,0.78,1.5,1.1)];
  var wrap=cv.parentElement;function size(){var w=wrap.clientWidth,h=wrap.clientHeight;if(!w||!h)return;r.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
  size();window.addEventListener('resize',size);
- (function loop(t){g.rotation.y+=0.0026;g.rotation.x=Math.sin(t*0.0002)*0.16;inner.rotation.y-=0.0045;cA.rotation.y+=0.0013;cB.rotation.y-=0.0019;
-   g.position.x+=(mx*0.7-g.position.x)*0.05;g.position.y+=(-my*0.55-g.position.y)*0.05;r.render(sc,cam);requestAnimationFrame(loop);})(0);
+ function setM(e){var b=cv.getBoundingClientRect();mx=((e.clientX-b.left)/b.width)*2-1;my=-(((e.clientY-b.top)/b.height)*2-1);}
+ cv.addEventListener('pointermove',function(e){setM(e);hoverT=1;});
+ cv.addEventListener('pointerenter',function(){hoverT=1;});
+ cv.addEventListener('pointerleave',function(){hoverT=0;});
+ var tmp=new THREE.Vector3();
+ function mouseWorld(){tmp.set(mx,my,0.5).unproject(cam);tmp.sub(cam.position).normalize();var dz=(0-cam.position.z)/tmp.z;return cam.position.clone().add(tmp.multiplyScalar(dz));}
+ (function loop(t){
+   hover+=(hoverT-hover)*0.07;
+   g.rotation.y+=0.0026;g.rotation.x=Math.sin(t*0.0002)*0.16;inner.rotation.y-=0.0045;
+   g.position.x+=(mx*0.5-g.position.x)*0.05;g.position.y+=(my*0.4-g.position.y)*0.05;
+   var yaw=t*0.00018,cy=Math.cos(yaw),sy=Math.sin(yaw),M=mouseWorld();
+   for(var ci=0;ci<clouds.length;ci++){var c=clouds[ci],home=c.home,pos=c.pos,n=c.n;
+     for(var i=0;i<n;i++){var hx=home[i*3],hy=home[i*3+1],hz=home[i*3+2];
+       var rx=hx*cy-hz*sy, rz=hx*sy+hz*cy;
+       var dx=M.x-rx, dy=M.y-hy, d2=dx*dx+dy*dy;
+       var pull=hover*Math.min(0.92,1.5/(1+d2*1.1));
+       var tx=rx+dx*pull, ty=hy+dy*pull;
+       pos[i*3]+=(tx-pos[i*3])*0.12;pos[i*3+1]+=(ty-pos[i*3+1])*0.12;pos[i*3+2]+=(rz-pos[i*3+2])*0.12;}
+     c.geo.attributes.position.needsUpdate=true;}
+   r.render(sc,cam);requestAnimationFrame(loop);})(0);
 }
 init();
 </script></body></html>
