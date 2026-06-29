@@ -1,5 +1,5 @@
 """
-ReportAgent — automated reporting agent.
+ReportAgent -- automated reporting agent.
 
 Assembles a professional, reproducible report from real computed statistics
 (EDA + significance tests) and, when available, an LLM-written executive
@@ -36,30 +36,53 @@ class ReportAgent:
         ]
 
         if not desc.empty:
-            parts += ["", "## 2. Key Statistics", "", desc.to_markdown()]
+            parts += [
+                "",
+                "## 2. Descriptive Statistics",
+                "",
+                desc.to_markdown(),
+            ]
+            skewed = desc[desc["skewness"].abs() > 1]
+            if not skewed.empty:
+                feats = ", ".join(f"`{i}`" for i in skewed.index)
+                parts += ["", f"_Strongly skewed features (|skew| > 1): {feats}._"]
 
         if not missing.empty:
-            parts += ["", "## 3. Missing-Value Profile", "", missing.to_markdown()]
-        else:
-            parts += ["", "## 3. Missing-Value Profile", "",
-                      "_No missing values detected._"]
+            has_missing = missing[missing["missing_count"] > 0]
+            if not has_missing.empty:
+                parts += [
+                    "",
+                    "## 3. Missing Values",
+                    "",
+                    has_missing.to_markdown(index=False),
+                ]
 
         if not top_corr.empty:
-            parts += ["", "## 4. Strongest Correlations (with significance)", "",
-                      top_corr.to_markdown(index=False)]
+            sig = top_corr[top_corr["significant"] == "significant"]
+            if not sig.empty:
+                parts += [
+                    "",
+                    "## 4. Key Correlations",
+                    "",
+                    sig.to_markdown(index=False),
+                ]
 
         deterministic = "\n".join(parts)
 
-        # Optional LLM-written executive summary + recommendations.
+        context = prior_analysis or deterministic
         prompt = (
-            "You are a senior data analyst. Based ONLY on the computed report below "
-            "(do not invent numbers), write two short sections in markdown:\n"
-            "## Executive Summary (2-3 sentences)\n"
-            "## Recommendations (3 concrete, data-driven bullet points)\n\n"
-            f"{deterministic}"
-            + (f"\n\nPrior analysis context:\n{prior_analysis}" if prior_analysis else "")
+            "You are a senior data scientist writing an executive summary. "
+            "Using ONLY the statistics below (do not invent numbers), write: "
+            "(1) a 3-sentence executive summary, (2) 3 key insights, "
+            "(3) 2 recommended next steps. Be specific and cite actual numbers.\n\n"
+            f"{context}"
         )
         narrative = llm.narrate(prompt)
         if narrative:
-            return narrative + "\n\n---\n\n" + deterministic
+            return (
+                "## Executive Summary\n\n"
+                + narrative
+                + "\n\n---\n\n"
+                + deterministic
+            )
         return deterministic

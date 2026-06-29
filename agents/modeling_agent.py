@@ -48,10 +48,10 @@ class ModelingAgent:
     def _build_figures(self, res: dict) -> list[dict]:
         figs = []
         metric = res["primary_metric"]
-        results_df = res["results"]
+        results_df = res.get("leaderboard", res.get("results"))
 
         # 1) Model comparison on the held-out metric
-        comp = results_df[[metric]].reset_index()
+        comp = results_df[["model", metric]] if "model" in results_df.columns else results_df[[metric]].reset_index()
         fig = px.bar(comp, x="model", y=metric, title=f"Model comparison ({metric.upper()})",
                      text=metric, template="plotly_white", color="model")
         fig.update_traces(textposition="outside")
@@ -63,14 +63,14 @@ class ModelingAgent:
         if imp is not None and not imp.empty:
             top = imp.head(15).iloc[::-1]
             fig = px.bar(top, x="importance", y="feature", orientation="h",
-                         title="Permutation feature importance",
-                         template="plotly_white", error_x="std")
+                         title="Feature importance",
+                         template="plotly_white")
             figs.append({"title": "Feature importance", "figure": fig,
                          "description": "Drop in held-out score when each feature is shuffled."})
 
         # 3) Confusion matrix (classification only)
         cm = res.get("confusion_matrix")
-        if cm is not None and not cm.empty:
+        if cm is not None and (hasattr(cm, 'empty') and not cm.empty or not hasattr(cm, 'empty')):
             fig = px.imshow(cm, text_auto=True, color_continuous_scale="Blues",
                             title=f"Confusion matrix — {res['best_model']}",
                             template="plotly_white", aspect="auto")
@@ -83,7 +83,7 @@ class ModelingAgent:
         metric = res["primary_metric"]
         best = res["best_model"]
         score = res["best_score"]
-        results_df = res["results"]
+        results_df = res.get("leaderboard", res.get("results"))
 
         # Deterministic, always-correct summary built from the real numbers.
         lines = [
@@ -98,7 +98,7 @@ class ModelingAgent:
             "",
             "**Model leaderboard:**",
             "",
-            results_df.to_markdown(),
+            results_df.to_markdown(index=False) if results_df is not None else "",
         ]
         if res.get("dropped_id_columns"):
             lines += ["", f"_Identifier-like columns excluded from features: "
@@ -109,6 +109,28 @@ class ModelingAgent:
             top3 = ", ".join(f"`{r.feature}`" for r in imp.head(3).itertuples())
             lines += ["", f"**Most predictive features:** {top3}."]
 
+        # Imbalance note
+        ratio = res.get("imbalance_ratio", 1.0)
+        cw = res.get("class_weight_applied")
+        if ratio and ratio >= 1.5:
+            lines += [
+                "",
+                f"⚠️ **Class imbalance detected** (ratio {ratio:.1f}:1). "
+                + ("Training used `class_weight='balanced'` to compensate."
+                   if cw else "Consider class-weighted training.")
+            ]
+
+        # Extra metrics note (MCC, PR-AUC)
+        task = res.get("task", "classification")
+        if task == "classification":
+            best_metrics = res.get("metrics", {})
+            if "mcc" in best_metrics:
+                lines += ["", f"**Matthews Correlation Coefficient (MCC):** {best_metrics['mcc']:.3f} "
+                              f"— most reliable metric for imbalanced datasets."]
+            if "pr_auc" in best_metrics:
+                lines += [f"**PR-AUC:** {best_metrics['pr_auc']:.3f} "
+                          f"— area under precision-recall curve."]
+
         deterministic = "\n".join(lines)
 
         # Optional LLM interpretation layered on top of the real metrics.
@@ -116,7 +138,8 @@ class ModelingAgent:
             "You are a data scientist explaining model results to a non-technical "
             "stakeholder. In 3-4 sentences, interpret these results: what the best "
             "model achieved, whether the performance is trustworthy (consider the "
-            f"cross-validation std), and what the top features imply.\n\n{deterministic}"
+            f"cross-validation std), what the top features imply, and whether MCC/PR-AUC "
+            f"suggest the model handles class imbalance well.\n\n{deterministic}"
         )
         interpretation = llm.narrate(prompt)
         if interpretation:

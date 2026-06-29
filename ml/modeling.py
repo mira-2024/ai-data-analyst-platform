@@ -31,8 +31,11 @@ from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     f1_score,
+    matthews_corrcoef,
     mean_absolute_error,
+    mean_absolute_percentage_error,
     mean_squared_error,
     precision_score,
     r2_score,
@@ -50,31 +53,25 @@ RANDOM_STATE = 42
 MAX_CLASS_CARDINALITY = 20  # numeric target with <= this many classes => classification
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Task & target detection
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 def detect_task(df: pd.DataFrame, target: str) -> str:
     """Return 'classification' or 'regression' for the given target column."""
     y = df[target].dropna()
     if y.dtype == object or str(y.dtype) in ("category", "bool"):
         return "classification"
-    # Numeric but few distinct values → treat as class labels.
     if y.nunique() <= MAX_CLASS_CARDINALITY:
         return "classification"
     return "regression"
 
 
 def suggest_target(df: pd.DataFrame) -> str | None:
-    """
-    Heuristic for the most plausible target column when the user doesn't pick
-    one: prefer a low-cardinality categorical/boolean column (a label), else the
-    last numeric column. ID-like columns are skipped.
-    """
+    """Heuristic for the most plausible target column."""
     candidates = [c for c in df.columns if not _looks_like_id(df, c)]
     if not candidates:
         candidates = list(df.columns)
 
-    # 0) columns whose name suggests they are the target/label.
     target_words = ("target", "label", "outcome", "class", "result", "churn",
                     "promoted", "converted", "default", "survived", "approved", "y")
     for col in candidates:
@@ -82,18 +79,14 @@ def suggest_target(df: pd.DataFrame) -> str | None:
             if 2 <= df[col].nunique(dropna=True) <= MAX_CLASS_CARDINALITY:
                 return col
 
-    # 1) binary / low-cardinality categorical labels (prefer the last such column,
-    #    as targets are conventionally placed at the end of a dataset).
     for col in reversed(candidates):
         nun = df[col].nunique(dropna=True)
         if df[col].dtype == object or str(df[col].dtype) in ("category", "bool"):
             if 2 <= nun <= MAX_CLASS_CARDINALITY:
                 return col
-    # 2) low-cardinality numeric (encoded labels)
     for col in reversed(candidates):
         if col in eda.numeric_columns(df) and 2 <= df[col].nunique(dropna=True) <= MAX_CLASS_CARDINALITY:
             return col
-    # 3) fall back to last numeric column
     num = [c for c in eda.numeric_columns(df) if c in candidates]
     return num[-1] if num else (candidates[-1] if candidates else None)
 
@@ -103,9 +96,6 @@ def _looks_like_id(df: pd.DataFrame, col: str) -> bool:
     if name in ("id", "index", "uuid") or name.endswith("_id") or name.endswith("id"):
         if df[col].nunique() > 0.9 * len(df):
             return True
-    # A near-unique *non-numeric* column (names, codes, UUIDs) is an identifier.
-    # Continuous numeric columns are legitimately near-unique (every float differs)
-    # and are real features, so they must NEVER be treated as IDs.
     return (
         df[col].nunique() >= 0.98 * len(df)
         and len(df) > 10
@@ -113,9 +103,9 @@ def _looks_like_id(df: pd.DataFrame, col: str) -> bool:
     )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Preprocessing
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     """Impute + scale numeric features; impute + one-hot encode categoricals."""
     num_cols = X.select_dtypes(include=np.number).columns.tolist()
@@ -124,10 +114,9 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     numeric_pipe = Pipeline(
         [("impute", SimpleImputer(strategy="median")), ("scale", StandardScaler())]
     )
-    # handle_unknown='ignore' keeps test-time categories the model never saw safe.
     try:
         ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-    except TypeError:  # older sklearn
+    except TypeError:
         ohe = OneHotEncoder(handle_unknown="ignore", sparse=False)
     categorical_pipe = Pipeline(
         [("impute", SimpleImputer(strategy="most_frequent")), ("encode", ohe)]
@@ -139,43 +128,51 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     )
 
 
-def _candidate_models(task: str) -> dict:
+def _candidate_models(task: str, class_weight: str | None = None) -> dict:
+    """Return candidate models for the given task."""
     if task == "classification":
         return {
-            "Logistic Regression": LogisticRegression(max_iter=1000),
-            "Random Forest": RandomForestClassifier(
-                n_estimators=200, random_state=RANDOM_STATE, n_jobs=-1
+            "Logistic Regression": LogisticRegression(
+                max_iter=1000, class_weight=class_weight
             ),
-            "Gradient Boosting": GradientBoostingClassifier(random_state=RANDOM_STATE),
+            "Random Forest": RandomForestClassifier(
+                n_estimators=100, max_depth=10, random_state=RANDOM_STATE,
+                n_jobs=-1, class_weight=class_weight,
+            ),
+            "Gradient Boosting": GradientBoostingClassifier(
+                n_estimators=100, max_depth=4, random_state=RANDOM_STATE,
+            ),
         }
     return {
         "Linear Regression": LinearRegression(),
         "Random Forest": RandomForestRegressor(
-            n_estimators=200, random_state=RANDOM_STATE, n_jobs=-1
+            n_estimators=100, max_depth=10, random_state=RANDOM_STATE, n_jobs=-1
         ),
-        "Gradient Boosting": GradientBoostingRegressor(random_state=RANDOM_STATE),
+        "Gradient Boosting": GradientBoostingRegressor(
+            n_estimators=100, max_depth=4, random_state=RANDOM_STATE,
+        ),
     }
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 # Metrics
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 def _classification_metrics(y_true, y_pred, y_proba=None) -> dict:
-    # "weighted" averaging works for any label dtype (string or numeric) and any
-    # number of classes, avoiding the pos_label ambiguity of "binary".
     classes = np.unique(y_true)
     m = {
-        "accuracy": round(accuracy_score(y_true, y_pred), 4),
+        "accuracy":  round(accuracy_score(y_true, y_pred), 4),
         "precision": round(precision_score(y_true, y_pred, average="weighted", zero_division=0), 4),
-        "recall": round(recall_score(y_true, y_pred, average="weighted", zero_division=0), 4),
-        "f1": round(f1_score(y_true, y_pred, average="weighted", zero_division=0), 4),
+        "recall":    round(recall_score(y_true, y_pred, average="weighted", zero_division=0), 4),
+        "f1":        round(f1_score(y_true, y_pred, average="weighted", zero_division=0), 4),
+        "f1_weighted": round(f1_score(y_true, y_pred, average="weighted", zero_division=0), 4),
+        "mcc":       round(float(matthews_corrcoef(y_true, y_pred)), 4),
     }
     if y_proba is not None:
         try:
             if len(classes) == 2:
-                # Binarise against the second (sorted) class = positive class.
                 y_bin = (np.asarray(y_true) == classes[1]).astype(int)
                 m["roc_auc"] = round(roc_auc_score(y_bin, y_proba[:, 1]), 4)
+                m["pr_auc"]  = round(average_precision_score(y_bin, y_proba[:, 1]), 4)
             else:
                 m["roc_auc"] = round(
                     roc_auc_score(y_true, y_proba, multi_class="ovr", average="weighted"), 4
@@ -187,29 +184,59 @@ def _classification_metrics(y_true, y_pred, y_proba=None) -> dict:
 
 def _regression_metrics(y_true, y_pred) -> dict:
     rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
-    return {
-        "r2": round(r2_score(y_true, y_pred), 4),
+    m = {
+        "r2":   round(r2_score(y_true, y_pred), 4),
         "rmse": round(rmse, 4),
-        "mae": round(mean_absolute_error(y_true, y_pred), 4),
+        "mae":  round(mean_absolute_error(y_true, y_pred), 4),
     }
+    try:
+        mape = mean_absolute_percentage_error(y_true, y_pred)
+        m["mape"] = round(float(mape), 4)
+    except Exception:
+        pass
+    return m
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
+# Feature importance
+# ------------------------------------------------------------------------------
+def _feature_importance(pipe: Pipeline, X_test: pd.DataFrame,
+                         y_test: pd.Series, task: str) -> pd.DataFrame | None:
+    try:
+        model = pipe[-1]
+        feature_names = pipe[:-1].get_feature_names_out()
+        if hasattr(model, "feature_importances_"):
+            imp = model.feature_importances_
+        elif hasattr(model, "coef_"):
+            imp = np.abs(model.coef_).flatten()
+            if len(imp) > len(feature_names):
+                imp = imp[:len(feature_names)]
+        else:
+            result = permutation_importance(
+                pipe, X_test, y_test, n_repeats=5, random_state=RANDOM_STATE, n_jobs=-1
+            )
+            imp = result.importances_mean
+            # permutation importance is over original features
+            feature_names = list(X_test.columns)
+        if len(imp) != len(feature_names):
+            return None
+        df_imp = pd.DataFrame({"feature": feature_names, "importance": imp})
+        df_imp = df_imp.sort_values("importance", ascending=False).reset_index(drop=True)
+        return df_imp
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------------------------
 # Main entry point
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
 def train_and_evaluate(
     df: pd.DataFrame,
     target: str,
     test_size: float = 0.2,
     cv_folds: int = 5,
 ) -> dict:
-    """
-    Train and evaluate candidate models for ``target``.
-
-    Returns a dict with the detected task, per-model metrics, the chosen best
-    model, cross-validation scores, feature importances, and (for
-    classification) the confusion matrix. Raises ValueError on unusable input.
-    """
+    """Train and evaluate candidate models. Returns a results dict."""
     if target not in df.columns:
         raise ValueError(f"target column '{target}' not found")
 
@@ -217,7 +244,6 @@ def train_and_evaluate(
     if len(data) < 20:
         raise ValueError("not enough rows with a known target (need >= 20)")
 
-    # Drop obvious identifier columns from the feature set.
     drop_cols = [c for c in data.columns if c != target and _looks_like_id(data, c)]
     X = data.drop(columns=[target] + drop_cols)
     y = data[target]
@@ -228,7 +254,33 @@ def train_and_evaluate(
     primary_metric = "f1" if task == "classification" else "r2"
     scoring = "f1_weighted" if task == "classification" else "r2"
 
-    # Stratify classification splits when each class has enough samples.
+    # Cap to 15K rows for large datasets to keep the UI responsive
+    MAX_TRAIN_ROWS = 15_000
+    if len(data) > MAX_TRAIN_ROWS:
+        if task == "classification":
+            # Stratified sample per class (pandas-2.0 safe — no groupby.apply)
+            classes = data[target].unique()
+            ratio = MAX_TRAIN_ROWS / len(data)
+            parts = [
+                grp.sample(max(1, int(len(grp) * ratio)), random_state=RANDOM_STATE)
+                for grp in (data[data[target] == c] for c in classes)
+            ]
+            data = pd.concat(parts).sample(frac=1, random_state=RANDOM_STATE).reset_index(drop=True)
+        else:
+            data = data.sample(MAX_TRAIN_ROWS, random_state=RANDOM_STATE).reset_index(drop=True)
+        X = data.drop(columns=[target] + drop_cols)
+        y = data[target]
+
+    # Detect class imbalance
+    imbalance_ratio = 1.0
+    class_weight = None
+    if task == "classification":
+        vc = y.value_counts()
+        if len(vc) >= 2:
+            imbalance_ratio = round(float(vc.iloc[0] / vc.iloc[-1]), 2)
+            if imbalance_ratio >= 1.5:
+                class_weight = "balanced"
+
     stratify = y if (task == "classification" and y.value_counts().min() >= 2) else None
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=RANDOM_STATE, stratify=stratify
@@ -237,10 +289,10 @@ def train_and_evaluate(
     pre = build_preprocessor(X)
     results = []
     fitted = {}
-    n_splits = max(2, min(cv_folds, int(y_train.value_counts().min()) if task == "classification"
-                          else cv_folds))
+    n_splits = max(2, min(cv_folds, int(y_train.value_counts().min())
+                          if task == "classification" else cv_folds))
 
-    for name, model in _candidate_models(task).items():
+    for name, model in _candidate_models(task, class_weight=class_weight).items():
         pipe = Pipeline([("pre", pre), ("model", model)])
         try:
             cv_scores = cross_val_score(pipe, X_train, y_train, cv=n_splits, scoring=scoring)
@@ -252,70 +304,56 @@ def train_and_evaluate(
 
         if task == "classification":
             proba = pipe.predict_proba(X_test) if hasattr(pipe[-1], "predict_proba") else None
-            metrics = _classification_metrics(y_test, y_pred, proba)
+            m = _classification_metrics(y_test, y_pred, proba)
         else:
-            metrics = _regression_metrics(y_test, y_pred)
+            m = _regression_metrics(y_test, y_pred)
 
-        metrics["cv_mean"] = round(float(np.nanmean(cv_scores)), 4)
-        metrics["cv_std"] = round(float(np.nanstd(cv_scores)), 4)
-        metrics["model"] = name
-        results.append(metrics)
+        m["cv_mean"] = round(float(np.nanmean(cv_scores)), 4)
+        m["cv_std"]  = round(float(np.nanstd(cv_scores)), 4)
+        m["model"]   = name
+        results.append(m)
         fitted[name] = pipe
 
     results_df = pd.DataFrame(results).set_index("model")
-    # Best by held-out primary metric (higher is better for r2/f1).
-    best_name = results_df[primary_metric].idxmax()
-    best_pipe = fitted[best_name]
+    best_name  = results_df[primary_metric].idxmax()
+    best_pipe  = fitted[best_name]
 
     importances = _feature_importance(best_pipe, X_test, y_test, task)
 
     out = {
-        "task": task,
-        "target": target,
-        "primary_metric": primary_metric,
-        "n_train": int(len(X_train)),
-        "n_test": int(len(X_test)),
-        "n_features": int(X.shape[1]),
-        "dropped_id_columns": drop_cols,
-        "cv_folds": n_splits,
-        "results": results_df.round(4),
-        "best_model": best_name,
-        "best_score": float(results_df.loc[best_name, primary_metric]),
-        "feature_importance": importances,
+        "task":                  task,
+        "target":                target,
+        "primary_metric":        primary_metric,
+        "n_train":               int(len(X_train)),
+        "n_test":                int(len(X_test)),
+        "n_features":            int(X.shape[1]),
+        "dropped_id_columns":    drop_cols,
+        "cv_folds":              n_splits,
+        "leaderboard":           results_df.round(4).reset_index(),
+        "best_model":            best_name,
+        "best_score":            float(results_df.loc[best_name, primary_metric]),
+        "metrics":               results_df.loc[best_name].to_dict(),
+        "feature_importance":    importances,
+        "best_pipeline":         best_pipe,
+        "X_test":                X_test,
+        "y_test":                y_test,
+        "y_pred":                best_pipe.predict(X_test),
+        "imbalance_ratio":       imbalance_ratio,
+        "class_weight_applied":  class_weight,
+        "cv_results": {
+            "mean":   float(np.nanmean(results_df["cv_mean"])),
+            "std":    float(np.nanmean(results_df["cv_std"])),
+            "metric": "F1 (weighted)" if task == "classification" else "R2",
+        },
     }
 
     if task == "classification":
-        y_pred_best = best_pipe.predict(X_test)
+        y_pred_best = out["y_pred"]
         labels = sorted(pd.unique(y_test))
         cm = confusion_matrix(y_test, y_pred_best, labels=labels)
-        out["confusion_matrix"] = pd.DataFrame(
-            cm, index=[f"actual {l}" for l in labels], columns=[f"pred {l}" for l in labels]
-        )
-        out["class_labels"] = [str(l) for l in labels]
+        out["confusion_matrix"] = cm.tolist()
+        out["class_labels"]     = [str(l) for l in labels]
+        if hasattr(best_pipe[-1], "predict_proba"):
+            out["y_proba"] = best_pipe.predict_proba(X_test)
 
     return out
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Feature importance
-# ──────────────────────────────────────────────────────────────────────────────
-def _feature_importance(pipe: Pipeline, X_test, y_test, task: str) -> pd.DataFrame:
-    """
-    Permutation importance on the held-out set — model-agnostic and measured on
-    data the model has not seen, so it reflects genuine predictive value.
-    """
-    try:
-        scoring = "f1_weighted" if task == "classification" else "r2"
-        r = permutation_importance(
-            pipe, X_test, y_test, n_repeats=10, random_state=RANDOM_STATE, scoring=scoring
-        )
-        imp = pd.DataFrame(
-            {
-                "feature": X_test.columns,
-                "importance": r.importances_mean.round(4),
-                "std": r.importances_std.round(4),
-            }
-        )
-        return imp.sort_values("importance", ascending=False).reset_index(drop=True)
-    except Exception:
-        return pd.DataFrame()

@@ -1,11 +1,11 @@
 """
-AnalysisAgent — statistical analysis agent.
+AnalysisAgent -- statistical analysis agent.
 
 Rewritten to be *computation-first*. Instead of asking a language model to
 "analyse" a text summary (which produces plausible-sounding but unverified
 prose), this agent now computes real exploratory and inferential statistics
-with pandas/SciPy via the ``ml`` package, and only then uses the LLM — if
-available — to interpret those concrete numbers.
+with pandas/SciPy via the ``ml`` package, and only then uses the LLM -- if
+available -- to interpret those concrete numbers.
 """
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ class AnalysisAgent:
         if not desc.empty:
             sections += ["", "### Descriptive statistics (numeric)", "",
                          desc.to_markdown()]
-            # Flag notable distribution shapes from the real skewness values.
             skewed = desc[desc["skewness"].abs() > 1]
             if not skewed.empty:
                 feats = ", ".join(f"`{i}` (skew={skewed.loc[i, 'skewness']:.2f})"
@@ -61,7 +60,6 @@ class AnalysisAgent:
 
         deterministic = "\n".join(sections)
 
-        # Optional LLM interpretation grounded in the computed numbers.
         request = query or "Summarise the key statistical findings and what they imply."
         prompt = (
             "You are a senior data analyst. Using ONLY the computed statistics below "

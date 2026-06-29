@@ -295,6 +295,6 @@ def render_deeper_statistics(df: pd.DataFrame) -> None:
             screen["significant (FDR)"] = np.where(corrected["reject"], "yes", "no")
             st.caption(f"Target: `{target}`")
             st.dataframe(C.format_pvalues(screen, ["p_value", "p_adjusted (FDR)"]),
-                         width="stretch")
+                         use_container_width=True)
         else:
             st.caption("Not enough data to screen features.")

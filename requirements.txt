@@ -12,6 +12,7 @@ tabulate>=0.9.0          # DataFrame.to_markdown() in reports
 # ── Data science core ────────────────────────────────────────────────────────
 scikit-learn>=1.3.0      # ML models, preprocessing, metrics, permutation importance
 scipy>=1.10.0            # statistical hypothesis tests
+shap>=0.44.0             # SHAP model explainability (TreeExplainer, LinearExplainer)
 
 # ── Optional LLM narration ───────────────────────────────────────────────────
 google-genai>=1.0.0      # only needed for the Chat tab / LLM narration

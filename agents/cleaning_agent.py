@@ -1,5 +1,5 @@
 """
-CleaningAgent — data preparation agent.
+CleaningAgent -- data preparation agent.
 
 Performs deterministic, auditable cleaning steps and returns both the cleaned
 DataFrame and a transparent log of exactly what changed. The LLM is used only
@@ -17,7 +17,7 @@ from utils import llm
 class CleaningAgent:
     def clean(self, df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         original_shape = df.shape
-        df = df.copy()  # never mutate the caller's DataFrame
+        df = df.copy()
         report_lines = [
             f"- **Original shape:** {original_shape[0]} rows x {original_shape[1]} columns"
         ]
@@ -30,15 +30,11 @@ class CleaningAgent:
             df = df.drop_duplicates()
             report_lines.append(f"- Removed **{dups}** duplicate rows.")
 
-        # Trim whitespace on text columns. Strip only non-null cells so genuine
-        # missing values stay NaN and are imputed below (astype(str) on the whole
-        # column would turn NaN into the literal string "nan").
         str_cols = df.select_dtypes(include="object").columns
         for col in str_cols:
             mask = df[col].notna()
             df.loc[mask, col] = df.loc[mask, col].astype(str).str.strip()
 
-        # Impute missing numeric values with the median (robust to outliers).
         num_cols = df.select_dtypes(include="number").columns
         filled_num = 0
         for col in num_cols:
@@ -51,7 +47,6 @@ class CleaningAgent:
                 f"- Imputed **{filled_num}** missing numeric values with the column median."
             )
 
-        # Impute missing categorical values with the mode.
         filled_cat = 0
         for col in str_cols:
             nulls = int(df[col].isnull().sum())
@@ -65,7 +60,7 @@ class CleaningAgent:
             )
 
         if filled_num == 0 and filled_cat == 0 and dups == 0:
-            report_lines.append("- No duplicates or missing values were found — data was already clean.")
+            report_lines.append("- No duplicates or missing values were found -- data was already clean.")
 
         report_lines.append(
             f"- **Cleaned shape:** {df.shape[0]} rows x {df.shape[1]} columns"
@@ -73,7 +68,6 @@ class CleaningAgent:
 
         deterministic = "### Data Cleaning Report\n\n" + "\n".join(report_lines)
 
-        # Optional LLM phrasing.
         summary = get_df_summary(df)
         prompt = (
             "You are a data preparation assistant. In 2-3 sentences, summarise the "
